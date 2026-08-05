@@ -63,9 +63,6 @@ streamlit run app.py
 **R. Thimme Gowd**
 
 B.Tech – CSE (AI & ML)
-
-Sri Venkateswara College of Engineering
-
 ---
 
 ## 📄 License
