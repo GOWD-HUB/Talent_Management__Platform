@@ -242,6 +242,46 @@ def create_tables():
         )
 
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS professional_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER UNIQUE NOT NULL,
+            current_company TEXT,
+            current_role TEXT,
+            department TEXT,
+            total_experience REAL DEFAULT 0,
+            employment_type TEXT,
+            current_location TEXT,
+            work_mode TEXT,
+            phone TEXT,
+            highest_qualification TEXT,
+            technical_skills TEXT,
+            programming_languages TEXT,
+            frameworks TEXT,
+            databases TEXT,
+            cloud_platforms TEXT,
+            devops_tools TEXT,
+            certifications TEXT,
+            leadership_experience TEXT,
+            team_size INTEGER DEFAULT 0,
+            projects_led INTEGER DEFAULT 0,
+            mentoring_experience TEXT,
+            communication_level TEXT,
+            career_goal TEXT,
+            preferred_roles TEXT,
+            target_company TEXT,
+            preferred_location TEXT,
+            current_salary REAL DEFAULT 0,
+            expected_salary REAL DEFAULT 0,
+            notice_period TEXT,
+            linkedin_url TEXT,
+            github_url TEXT,
+            portfolio_url TEXT,
+            updated_at TEXT,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS student_goals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -312,6 +352,25 @@ def create_tables():
             role TEXT NOT NULL,
             match_score INTEGER NOT NULL,
             reasons TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS professional_skill_assessments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            target_role TEXT,
+            backend_score INTEGER NOT NULL,
+            system_design_score INTEGER NOT NULL,
+            cloud_score INTEGER NOT NULL,
+            devops_score INTEGER NOT NULL,
+            leadership_score INTEGER NOT NULL,
+            communication_score INTEGER NOT NULL,
+            overall_score INTEGER NOT NULL,
+            readiness_level TEXT NOT NULL,
+            answers_json TEXT NOT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
@@ -1131,7 +1190,10 @@ session_defaults = {
     "mock_interview_questions": [],
     "mock_interview_result": None,
     "daily_coding_challenge": None,
-    "resume_preview": ""
+    "resume_preview": "",
+    "professional_navigation": "🏢 Professional Dashboard",
+    "professional_learning_track": "Backend Development",
+    "professional_learning_quiz_result": None
 }
 
 for key, value in session_defaults.items():
@@ -2874,6 +2936,296 @@ def college_nav_button(label, page_name, key):
     )
 
 
+def set_school_navigation(page_name):
+    """Update the selected School Student page."""
+    st.session_state.school_navigation = page_name
+
+
+def school_nav_button(label, page_name, key):
+    """Render one modern School Student sidebar navigation button."""
+    is_active = (
+        st.session_state.get("school_navigation")
+        == page_name
+    )
+
+    st.sidebar.button(
+        label,
+        key=key,
+        width="stretch",
+        type="primary" if is_active else "secondary",
+        on_click=set_school_navigation,
+        args=(page_name,)
+    )
+
+
+# ==========================================================
+# WORKING PROFESSIONAL HELPERS
+# ==========================================================
+
+def set_professional_navigation(page_name):
+    """Update the selected Working Professional page."""
+    st.session_state.professional_navigation = page_name
+
+
+def professional_nav_button(label, page_name, key):
+    """Render one modern Working Professional navigation button."""
+    is_active = st.session_state.get("professional_navigation") == page_name
+    st.sidebar.button(
+        label,
+        key=key,
+        width="stretch",
+        type="primary" if is_active else "secondary",
+        on_click=set_professional_navigation,
+        args=(page_name,)
+    )
+
+
+def csv_list(value):
+    """Convert comma-separated profile text into a clean list."""
+    return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+def get_professional_profile(user_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM professional_profiles WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    columns = [item[0] for item in cursor.description] if cursor.description else []
+    connection.close()
+    return dict(zip(columns, row)) if row else {}
+
+
+def professional_metrics(profile):
+    skills = set(item.lower() for item in csv_list(profile.get("technical_skills")))
+    skills.update(item.lower() for item in csv_list(profile.get("programming_languages")))
+    skills.update(item.lower() for item in csv_list(profile.get("frameworks")))
+    skills.update(item.lower() for item in csv_list(profile.get("cloud_platforms")))
+    skills.update(item.lower() for item in csv_list(profile.get("devops_tools")))
+    experience = float(profile.get("total_experience") or 0)
+    team_size = int(profile.get("team_size") or 0)
+    projects_led = int(profile.get("projects_led") or 0)
+    leadership_text = (profile.get("leadership_experience") or "").lower()
+    communication = profile.get("communication_level") or "Beginner"
+    comm_score = {"Beginner": 45, "Intermediate": 65, "Advanced": 82, "Expert": 92}.get(communication, 60)
+
+    backend_terms = {"python", "django", "flask", "fastapi", "java", "spring", "spring boot", "node", "node.js", "rest api", "sql"}
+    cloud_terms = {"aws", "azure", "gcp", "google cloud", "cloud computing"}
+    devops_terms = {"docker", "kubernetes", "jenkins", "terraform", "devops", "ci/cd"}
+    system_terms = {"system design", "microservices", "distributed systems", "architecture"}
+
+    backend = min(95, 50 + 5 * len(skills & backend_terms) + int(experience * 3))
+    cloud = min(95, 40 + 10 * len(skills & cloud_terms) + 5 * len(skills & devops_terms))
+    devops = min(95, 38 + 10 * len(skills & devops_terms))
+    system_design = min(95, 42 + 10 * len(skills & system_terms) + int(experience * 4))
+    leadership = min(95, 45 + int(experience * 3) + min(team_size, 10) * 2 + projects_led * 3 + (8 if leadership_text else 0))
+    technical = round((backend + cloud + devops + system_design) / 4)
+    promotion = min(96, round(technical * .48 + leadership * .27 + comm_score * .25))
+
+    profile_fields = [
+        "current_company", "current_role", "total_experience", "technical_skills",
+        "certifications", "career_goal", "preferred_roles", "current_salary",
+        "expected_salary", "leadership_experience", "linkedin_url", "phone"
+    ]
+    completion = round(sum(bool(profile.get(field)) for field in profile_fields) / len(profile_fields) * 100)
+    current_salary = float(profile.get("current_salary") or 0)
+    expected_salary = float(profile.get("expected_salary") or 0)
+    salary_growth = round(((expected_salary-current_salary)/current_salary)*100) if current_salary and expected_salary else 0
+
+    return {
+        "Backend Development": backend,
+        "System Design": system_design,
+        "Cloud Computing": cloud,
+        "DevOps": devops,
+        "Leadership": leadership,
+        "Communication": comm_score,
+        "Technical Readiness": technical,
+        "Promotion Readiness": promotion,
+        "Profile Completion": completion,
+        "Salary Growth": salary_growth
+    }
+
+
+def professional_role_matches(profile, metrics):
+    current_role = profile.get("current_role") or "Software Professional"
+    preferred = csv_list(profile.get("preferred_roles"))
+    defaults = ["Senior Backend Engineer", "Backend Architect", "Cloud Engineer", "Engineering Lead"]
+    roles = (preferred + defaults)[:4]
+    base = metrics["Technical Readiness"]
+    scores = []
+    for index, role in enumerate(roles):
+        role_lower = role.lower()
+        score = base + 8 - index * 5
+        if "lead" in role_lower or "manager" in role_lower:
+            score = round((metrics["Leadership"] + metrics["Communication"]) / 2)
+        elif "cloud" in role_lower:
+            score = metrics["Cloud Computing"] + 10
+        elif "architect" in role_lower or "system" in role_lower:
+            score = metrics["System Design"] + 8
+        elif "backend" in role_lower:
+            score = metrics["Backend Development"] + 7
+        scores.append((role, max(45, min(96, score))))
+    return scores
+
+
+# ==========================================================
+# FINAL STREAMLIT FRAME / TOP-BAR PROFESSIONAL UI FIX
+# ==========================================================
+
+st.markdown("""
+<style>
+
+/* Light, compact Streamlit top bar instead of the large black strip */
+[data-testid="stHeader"] {
+    background: rgba(244, 247, 252, 0.98) !important;
+    border-bottom: 1px solid #E5EAF2 !important;
+    box-shadow: none !important;
+    height: 52px !important;
+}
+
+[data-testid="stDecoration"] {
+    display: none !important;
+}
+
+[data-testid="stToolbar"] {
+    background: transparent !important;
+}
+
+[data-testid="stToolbar"] button,
+[data-testid="stToolbar"] a,
+[data-testid="stToolbar"] span {
+    color: #475569 !important;
+}
+
+[data-testid="stToolbar"] svg,
+[data-testid="stMainMenu"] svg {
+    color: #475569 !important;
+    fill: #475569 !important;
+}
+
+[data-testid="stMainMenu"] button {
+    background: transparent !important;
+    color: #475569 !important;
+    box-shadow: none !important;
+}
+
+/* Main workspace */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"] {
+    background: #F4F7FC !important;
+}
+
+[data-testid="stMain"] .block-container {
+    max-width: 1160px !important;
+    padding-top: 1.05rem !important;
+    padding-left: 1.4rem !important;
+    padding-right: 1.4rem !important;
+    padding-bottom: 2.25rem !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+/* Slightly more compact professional hero */
+.studio-hero,
+.learn-hero {
+    margin-top: 0 !important;
+    padding: 28px 32px !important;
+    border-radius: 23px !important;
+}
+
+.studio-hero h1,
+.learn-hero h1 {
+    font-size: clamp(30px, 3.2vw, 42px) !important;
+    line-height: 1.08 !important;
+}
+
+.studio-hero p,
+.learn-hero p {
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+    max-width: 840px !important;
+}
+
+/* Make the KPI row look like a professional dashboard */
+[data-testid="stMetric"] {
+    background: #FFFFFF !important;
+    border: 1px solid #E5EAF2 !important;
+    border-radius: 16px !important;
+    padding: 14px 16px !important;
+    min-height: 100px !important;
+    box-shadow: 0 7px 20px rgba(15, 23, 42, 0.045) !important;
+}
+
+[data-testid="stMetricLabel"] {
+    color: #64748B !important;
+    font-weight: 650 !important;
+}
+
+[data-testid="stMetricValue"] {
+    color: #0F172A !important;
+    font-weight: 800 !important;
+    font-size: clamp(1.65rem, 2.3vw, 2.45rem) !important;
+}
+
+/* Cleaner cards */
+.studio-panel,
+.studio-kpi,
+.learn-card,
+.learn-stat,
+.learn-project,
+.learn-road {
+    border-color: #E5EAF2 !important;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05) !important;
+}
+
+/* Professional sidebar */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #111827 0%, #101828 100%) !important;
+    border-right: 1px solid rgba(148, 163, 184, 0.12) !important;
+}
+
+section[data-testid="stSidebar"] > div {
+    padding-top: 0.55rem !important;
+}
+
+/* Reduce unnecessary vertical gaps */
+[data-testid="stVerticalBlock"] {
+    gap: 0.82rem !important;
+}
+
+/* Laptop fit */
+@media (max-width: 1400px) {
+    [data-testid="stMain"] .block-container {
+        max-width: 1080px !important;
+        padding-left: 1.15rem !important;
+        padding-right: 1.15rem !important;
+    }
+
+    .studio-hero,
+    .learn-hero {
+        padding: 25px 28px !important;
+    }
+}
+
+/* Mobile/tablet */
+@media (max-width: 900px) {
+    [data-testid="stHeader"] {
+        height: 48px !important;
+    }
+
+    [data-testid="stMain"] .block-container {
+        padding: 0.85rem 0.85rem 2rem !important;
+    }
+
+    .studio-hero,
+    .learn-hero {
+        padding: 22px 20px !important;
+        border-radius: 18px !important;
+    }
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 # ==========================================================
 # SIDEBAR HEADER
 # ==========================================================
@@ -2896,29 +3248,58 @@ if (
     and st.session_state.user_role == "School Student"
 ):
 
-    st.sidebar.success(
-        f"Welcome, {st.session_state.user_name}"
+    if "school_navigation" not in st.session_state:
+        st.session_state.school_navigation = "🏠 Student Home"
+
+    st.sidebar.markdown(
+        f"""<div class="college-user-card">
+<div class="user-label">Student Workspace</div>
+<div class="user-name">{st.session_state.user_name}</div>
+<div class="user-role">School Student · Learning & Career Discovery</div>
+</div>""",
+        unsafe_allow_html=True
     )
 
-    menu = st.sidebar.radio(
-        "School Student Features",
-        [
-            "🏠 Student Home",
-            "👤 My Profile",
-            "🔍 Career Explorer",
-            "📝 Subject Quiz",
-            "📊 Interest Assessment",
-            "🛣️ Future Skills Roadmap",
-            "📅 Daily Study Planner",
-            "📚 School Subjects",
-            "🧮 Aptitude Practice",
-            "🗣️ Communication Skills",
-            "🎯 Goal Tracker",
-            "🤖 AI Study Mentor",
-            "📄 My Report",
-            "🚪 Logout"
-        ]
+    st.sidebar.markdown(
+        '<div class="nav-section-label">Overview</div>',
+        unsafe_allow_html=True
     )
+    school_nav_button("🏠  Student Home", "🏠 Student Home", "school_nav_home")
+    school_nav_button("👤  My Profile", "👤 My Profile", "school_nav_profile")
+
+    st.sidebar.markdown(
+        '<div class="nav-section-label">Career Discovery</div>',
+        unsafe_allow_html=True
+    )
+    school_nav_button("🔍  Career Explorer", "🔍 Career Explorer", "school_nav_career")
+    school_nav_button("📊  Interest Assessment", "📊 Interest Assessment", "school_nav_interest")
+    school_nav_button("🛣️  Future Skills Roadmap", "🛣️ Future Skills Roadmap", "school_nav_roadmap")
+
+    st.sidebar.markdown(
+        '<div class="nav-section-label">Learning & Practice</div>',
+        unsafe_allow_html=True
+    )
+    school_nav_button("📝  Subject Quiz", "📝 Subject Quiz", "school_nav_quiz")
+    school_nav_button("📅  Daily Study Planner", "📅 Daily Study Planner", "school_nav_planner")
+    school_nav_button("📚  School Subjects", "📚 School Subjects", "school_nav_subjects")
+    school_nav_button("🧮  Aptitude Practice", "🧮 Aptitude Practice", "school_nav_aptitude")
+    school_nav_button("🗣️  Communication Skills", "🗣️ Communication Skills", "school_nav_communication")
+
+    st.sidebar.markdown(
+        '<div class="nav-section-label">Goals & Guidance</div>',
+        unsafe_allow_html=True
+    )
+    school_nav_button("🎯  Goal Tracker", "🎯 Goal Tracker", "school_nav_goals")
+    school_nav_button("🤖  AI Study Mentor", "🤖 AI Study Mentor", "school_nav_mentor")
+    school_nav_button("📄  My Report", "📄 My Report", "school_nav_report")
+
+    st.sidebar.markdown(
+        '<div class="nav-divider"></div>',
+        unsafe_allow_html=True
+    )
+    school_nav_button("🚪  Logout", "🚪 Logout", "school_nav_logout")
+
+    menu = st.session_state.school_navigation
 
 elif (
     st.session_state.logged_in
@@ -3065,6 +3446,44 @@ elif (
     )
 
     menu = st.session_state.college_navigation
+
+elif (
+    st.session_state.logged_in
+    and st.session_state.user_role == "Professional"
+):
+
+    if "professional_navigation" not in st.session_state:
+        st.session_state.professional_navigation = "🏢 Professional Dashboard"
+
+    st.sidebar.markdown(
+        f"""<div class="college-user-card">
+<div class="user-label">Professional Workspace</div>
+<div class="user-name">{st.session_state.user_name}</div>
+<div class="user-role">Working Professional · Career Growth</div>
+</div>""",
+        unsafe_allow_html=True
+    )
+
+    st.sidebar.markdown('<div class="nav-section-label">Overview</div>', unsafe_allow_html=True)
+    professional_nav_button("🏢  Dashboard", "🏢 Professional Dashboard", "pro_nav_dashboard")
+    professional_nav_button("👨‍💼  Professional Profile", "👨‍💼 Professional Profile", "pro_nav_profile")
+
+    st.sidebar.markdown('<div class="nav-section-label">Career Intelligence</div>', unsafe_allow_html=True)
+    professional_nav_button("📚  Learning & Skills", "📚 Professional Learning & Skill Development", "pro_nav_skills")
+    professional_nav_button("🚀  Career Transition", "🚀 Career Transition Suggestions", "pro_nav_transition")
+    professional_nav_button("📈  Promotion Readiness", "📈 Promotion Readiness", "pro_nav_promotion")
+    professional_nav_button("💰  Career & Salary Insights", "💰 Career & Salary Insights", "pro_nav_salary")
+
+    st.sidebar.markdown('<div class="nav-section-label">Growth & Opportunities</div>', unsafe_allow_html=True)
+    professional_nav_button("🔥  Industry Trends", "🔥 Industry Trends", "pro_nav_trends")
+    professional_nav_button("🎓  Certifications", "🎓 Certification Suggestions", "pro_nav_certifications")
+    professional_nav_button("🧭  Leadership Evaluation", "🧭 Leadership Evaluation", "pro_nav_leadership")
+    professional_nav_button("🎯  Advanced Job Matching", "🎯 Advanced Job Matching", "pro_nav_jobs")
+    professional_nav_button("🤖  AI Growth Report", "🤖 AI Growth Report", "pro_nav_report")
+
+    st.sidebar.markdown('<div class="nav-divider"></div>', unsafe_allow_html=True)
+    professional_nav_button("🚪  Logout", "🚪 Logout", "pro_nav_logout")
+    menu = st.session_state.professional_navigation
 
 elif st.session_state.logged_in:
 
@@ -6742,100 +7161,450 @@ elif menu == "🔥 Daily Coding Challenge":
 
 
 # ==========================================================
-# SCHOOL STUDENT HOME
+# SCHOOL STUDENT HOME — PROFESSIONAL UI
 # ==========================================================
 
 elif menu == "🏠 Student Home":
-
-    st.markdown(f"""
-        <div class="hero">
-            <h1>👋 Welcome, {st.session_state.user_name}</h1>
-            <p>
-                Explore careers, improve your skills and achieve your goals.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
 
     connection = get_connection()
     cursor = connection.cursor()
 
     cursor.execute(
-        "SELECT COUNT(*) FROM student_goals WHERE user_id = ?",
+        """
+        SELECT
+            school_name,
+            current_class,
+            board,
+            city,
+            favourite_subjects,
+            interests,
+            skills,
+            dream_career,
+            academic_goal,
+            achievements
+        FROM school_profiles
+        WHERE user_id = ?
+        """,
         (st.session_state.user_id,)
     )
 
+    school_profile = cursor.fetchone()
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM student_goals WHERE user_id = ?",
+        (st.session_state.user_id,)
+    )
     goal_count = cursor.fetchone()[0]
 
     cursor.execute(
         "SELECT COUNT(*) FROM quiz_results WHERE user_id = ?",
         (st.session_state.user_id,)
     )
-
     quiz_count = cursor.fetchone()[0]
 
     cursor.execute(
-        "SELECT id FROM school_profiles WHERE user_id = ?",
+        """
+        SELECT AVG(score)
+        FROM quiz_results
+        WHERE user_id = ? AND score IS NOT NULL
+        """,
         (st.session_state.user_id,)
     )
+    average_quiz_score = round(cursor.fetchone()[0] or 0)
 
-    profile_exists = cursor.fetchone() is not None
+    cursor.execute(
+        """
+        SELECT title, target_date, priority, progress
+        FROM student_goals
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 4
+        """,
+        (st.session_state.user_id,)
+    )
+    recent_goals = cursor.fetchall()
 
     connection.close()
 
-    col1, col2, col3, col4 = st.columns(4)
+    def school_dashboard_list(value):
+        try:
+            return json.loads(value) if value else []
+        except (json.JSONDecodeError, TypeError):
+            return []
 
-    col1.metric(
-        "Profile",
-        "Completed" if profile_exists else "Pending"
-    )
+    if school_profile:
+        school_name = school_profile[0] or "School not added"
+        current_class = school_profile[1] or "Class not added"
+        board = school_profile[2] or "Board not added"
+        city = school_profile[3] or "City not added"
+        favourite_subjects = school_dashboard_list(school_profile[4])
+        interests = school_dashboard_list(school_profile[5])
+        skills = school_dashboard_list(school_profile[6])
+        dream_career = school_profile[7] or "Explore career options"
+        academic_goal = school_profile[8] or "Set your academic goal"
+        achievements = school_profile[9] or ""
+        profile_exists = True
+    else:
+        school_name = "Complete your school profile"
+        current_class = "Class not added"
+        board = "Board not added"
+        city = "City not added"
+        favourite_subjects = []
+        interests = []
+        skills = []
+        dream_career = "Explore career options"
+        academic_goal = "Set your academic goal"
+        achievements = ""
+        profile_exists = False
 
-    col2.metric(
-        "Goals",
-        goal_count
-    )
+    profile_fields = [
+        school_name if profile_exists else "",
+        current_class if profile_exists else "",
+        board if profile_exists else "",
+        city if profile_exists else "",
+        favourite_subjects,
+        interests,
+        skills,
+        dream_career if profile_exists else "",
+        academic_goal if profile_exists else "",
+        achievements
+    ]
 
-    col3.metric(
-        "Quizzes Completed",
-        quiz_count
+    completed_profile_fields = sum(bool(value) for value in profile_fields)
+    profile_completion = round(
+        completed_profile_fields / len(profile_fields) * 100
     )
 
     completed_tasks = sum(
         task["completed"]
         for task in st.session_state.daily_tasks
     )
+    total_tasks = len(st.session_state.daily_tasks)
+    task_completion = round(
+        completed_tasks / total_tasks * 100
+    ) if total_tasks else 0
 
-    col4.metric(
-        "Daily Tasks",
-        f"{completed_tasks}/{len(st.session_state.daily_tasks)}"
+    goal_progress = round(
+        sum(int(goal[3] or 0) for goal in recent_goals) / len(recent_goals)
+    ) if recent_goals else 0
+
+    learning_score = round(
+        profile_completion * 0.30
+        + min(quiz_count * 12, 100) * 0.20
+        + average_quiz_score * 0.20
+        + task_completion * 0.20
+        + min(goal_count * 20, 100) * 0.10
     )
 
-    st.subheader("🚀 Your Learning Areas")
+    if learning_score >= 80:
+        readiness_label = "Excellent Progress"
+    elif learning_score >= 60:
+        readiness_label = "Good Progress"
+    elif learning_score >= 40:
+        readiness_label = "Developing"
+    else:
+        readiness_label = "Getting Started"
+
+    st.markdown(
+        f"""<div class="studio-hero">
+<span class="studio-badge">TalentSphere School Dashboard</span>
+<h1>Your complete learning and career discovery dashboard.</h1>
+<p>
+Welcome, {st.session_state.user_name}. Your dashboard brings together
+academic profile, quizzes, daily learning tasks, personal goals, skills
+and career exploration in one professional workspace.
+</p>
+</div>""",
+        unsafe_allow_html=True
+    )
+
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+
+    with kpi1:
+        st.markdown(
+            f"""<div class="studio-kpi">
+<div class="studio-kpi-icon">🎯</div>
+<div class="studio-kpi-label">Learning Readiness</div>
+<p class="studio-kpi-value">{learning_score}/100</p>
+<div class="studio-kpi-sub">{readiness_label}</div>
+</div>""",
+            unsafe_allow_html=True
+        )
+
+    with kpi2:
+        st.markdown(
+            f"""<div class="studio-kpi">
+<div class="studio-kpi-icon">👤</div>
+<div class="studio-kpi-label">Profile Strength</div>
+<p class="studio-kpi-value">{profile_completion}%</p>
+<div class="studio-kpi-sub">Academic and career profile</div>
+</div>""",
+            unsafe_allow_html=True
+        )
+
+    with kpi3:
+        st.markdown(
+            f"""<div class="studio-kpi">
+<div class="studio-kpi-icon">📝</div>
+<div class="studio-kpi-label">Quiz Performance</div>
+<p class="studio-kpi-value">{average_quiz_score}%</p>
+<div class="studio-kpi-sub">{quiz_count} quiz attempt(s) completed</div>
+</div>""",
+            unsafe_allow_html=True
+        )
+
+    with kpi4:
+        st.markdown(
+            f"""<div class="studio-kpi">
+<div class="studio-kpi-icon">✅</div>
+<div class="studio-kpi-label">Daily Tasks</div>
+<p class="studio-kpi-value">{completed_tasks}/{total_tasks}</p>
+<div class="studio-kpi-sub">Today's learning checklist</div>
+</div>""",
+            unsafe_allow_html=True
+        )
+
+    st.write("")
+
+    st.markdown(
+        """
+        <div style="
+            display:flex;
+            align-items:center;
+            gap:12px;
+            background:#FFFFFF;
+            border:1px solid #DCE6F3;
+            border-left:6px solid #2563EB;
+            border-radius:16px;
+            padding:17px 20px;
+            margin:14px 0 20px 0;
+            box-shadow:0 7px 22px rgba(15,23,42,0.07);
+        ">
+            <div style="
+                width:42px;
+                height:42px;
+                border-radius:12px;
+                background:#EFF6FF;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                font-size:22px;
+            ">🧠</div>
+            <div>
+                <div style="
+                    color:#0F172A !important;
+                    font-size:25px;
+                    line-height:1.15;
+                    font-weight:800;
+                    letter-spacing:-0.02em;
+                ">Learning Intelligence</div>
+                <div style="
+                    color:#64748B !important;
+                    font-size:13px;
+                    margin-top:4px;
+                ">
+                    Personalised analysis of your academic progress and career direction
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    intelligence_left, intelligence_right = st.columns([1.45, 1])
+
+    with intelligence_left:
+        st.markdown(
+            """<div class="studio-panel">
+<h3>📊 Readiness Breakdown</h3>
+<p style="color:#64748B !important;font-size:13px;">
+Your score combines profile completion, quiz performance, daily tasks
+and goal activity.
+</p>
+</div>""",
+            unsafe_allow_html=True
+        )
+
+        breakdown_df = pd.DataFrame({
+            "Area": [
+                "Profile",
+                "Quiz Activity",
+                "Quiz Score",
+                "Daily Tasks",
+                "Goals"
+            ],
+            "Score": [
+                profile_completion,
+                min(quiz_count * 12, 100),
+                average_quiz_score,
+                task_completion,
+                min(goal_count * 20, 100)
+            ]
+        })
+
+        breakdown_chart = px.bar(
+            breakdown_df,
+            x="Score",
+            y="Area",
+            orientation="h",
+            text="Score",
+            range_x=[0, 100]
+        )
+        breakdown_chart.update_traces(texttemplate="%{text}%", textposition="outside")
+        breakdown_chart.update_layout(
+            height=310,
+            margin=dict(l=10, r=25, t=20, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#0F172A"),
+            xaxis_title="",
+            yaxis_title="",
+            showlegend=False
+        )
+        st.plotly_chart(breakdown_chart, width="stretch")
+
+    with intelligence_right:
+        st.markdown(
+            f"""<div class="studio-panel">
+<h3>🎓 Student Snapshot</h3>
+<div class="studio-role-card">
+<div class="studio-role-title">{current_class}</div>
+<div class="studio-match">{school_name}</div>
+<p style="color:#64748B !important;margin:10px 0 0;">
+{board} · {city}
+</p>
+</div>
+<p style="color:#64748B !important;font-size:13px;margin-bottom:6px;">
+<strong style="color:#0F172A;">Dream career:</strong> {dream_career}
+</p>
+<p style="color:#64748B !important;font-size:13px;">
+<strong style="color:#0F172A;">Academic goal:</strong> {academic_goal}
+</p>
+</div>""",
+            unsafe_allow_html=True
+        )
+
+        if favourite_subjects or skills:
+            chips = favourite_subjects[:3] + skills[:3]
+            chip_html = "".join(
+                f'<span class="studio-chip">{item}</span>'
+                for item in chips
+            )
+            st.markdown(chip_html, unsafe_allow_html=True)
+        else:
+            st.info("Complete your profile to display subjects and skills.")
+
+    st.write("")
+    st.markdown(
+        '<div class="studio-section-title">🚀 Your Learning Areas</div>',
+        unsafe_allow_html=True
+    )
 
     area1, area2, area3 = st.columns(3)
 
     with area1:
-
-        st.info("""
-### 🔍 Career Discovery
-
-Explore suitable careers based on your favourite subjects and interests.
-        """)
+        st.markdown(
+            """<div class="studio-module-card">
+<div style="font-size:28px;">🔍</div>
+<h4>Career Discovery</h4>
+<p>Explore suitable careers based on your favourite subjects, interests and strengths.</p>
+<span class="studio-status-good">Personalised</span>
+</div>""",
+            unsafe_allow_html=True
+        )
 
     with area2:
-
-        st.success("""
-### 📚 Skill Development
-
-Improve coding, aptitude and communication abilities.
-        """)
+        st.markdown(
+            """<div class="studio-module-card">
+<div style="font-size:28px;">📚</div>
+<h4>Skill Development</h4>
+<p>Improve academic knowledge, aptitude, communication and beginner technical skills.</p>
+<span class="studio-status-progress">In Progress</span>
+</div>""",
+            unsafe_allow_html=True
+        )
 
     with area3:
+        st.markdown(
+            """<div class="studio-module-card">
+<div style="font-size:28px;">🎯</div>
+<h4>Goal Planning</h4>
+<p>Create academic and career goals, define target dates and monitor your progress.</p>
+<span class="studio-status-progress">Track Goals</span>
+</div>""",
+            unsafe_allow_html=True
+        )
 
-        st.warning("""
-### 🎯 Goal Planning
+    st.write("")
+    focus_left, focus_right = st.columns([1.15, 1])
 
-Create academic and career goals and track your progress.
-        """)
+    with focus_left:
+        st.markdown(
+            '<div class="studio-section-title">📌 Recommended Next Actions</div>',
+            unsafe_allow_html=True
+        )
+
+        recommended_actions = []
+
+        if profile_completion < 80:
+            recommended_actions.append(
+                ("Complete your student profile", "Add subjects, interests, skills and your dream career.")
+            )
+        if quiz_count < 3:
+            recommended_actions.append(
+                ("Complete a career or subject quiz", "Quiz results help TalentSphere personalise recommendations.")
+            )
+        if completed_tasks < total_tasks:
+            recommended_actions.append(
+                ("Finish today's learning tasks", "Complete the remaining items in your daily checklist.")
+            )
+        if goal_count == 0:
+            recommended_actions.append(
+                ("Create your first goal", "Set one academic target with a realistic target date.")
+            )
+        if not recommended_actions:
+            recommended_actions.append(
+                ("Continue your learning streak", "Review your progress and set a stronger weekly target.")
+            )
+
+        for title, description in recommended_actions[:4]:
+            st.markdown(
+                f"""<div class="studio-action">
+<strong>{title}</strong><br>
+<span>{description}</span>
+</div>""",
+                unsafe_allow_html=True
+            )
+
+    with focus_right:
+        st.markdown(
+            '<div class="studio-section-title">🎯 Goal Progress</div>',
+            unsafe_allow_html=True
+        )
+
+        st.markdown(
+            f"""<div class="studio-panel">
+<h3>Current Goal Activity</h3>
+<div class="studio-role-card">
+<div class="studio-role-title">{goal_progress}%</div>
+<div class="studio-match">Average progress</div>
+<p style="color:#64748B !important;margin:10px 0 0;">
+{goal_count} goal(s) created in your workspace.
+</p>
+</div>
+</div>""",
+            unsafe_allow_html=True
+        )
+
+        if recent_goals:
+            for goal_title, target_date, priority, progress in recent_goals:
+                st.progress(int(progress or 0) / 100)
+                st.caption(
+                    f"{goal_title} · {int(progress or 0)}% · "
+                    f"{priority or 'Normal priority'}"
+                )
+        else:
+            st.info("No goals created yet. Open Goal Setting to add one.")
 
 
 # ==========================================================
@@ -6845,9 +7614,13 @@ Create academic and career goals and track your progress.
 elif menu == "👤 My Profile":
 
     st.markdown(
-        """
-        <h1 class="page-title">👤 School Student Profile</h1>
-        """,
+        """<div class="college-profile-header">
+<h1>👤 School Student Profile</h1>
+<p>
+Create a complete academic and career-interest profile to receive
+personalised subject, skills, study-plan and career recommendations.
+</p>
+</div>""",
         unsafe_allow_html=True
     )
 
@@ -6875,6 +7648,12 @@ elif menu == "👤 My Profile":
     profile = cursor.fetchone()
     connection.close()
 
+    def safe_school_json_list(value):
+        try:
+            return json.loads(value) if value else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
     if profile:
 
         saved_profile = {
@@ -6884,15 +7663,9 @@ elif menu == "👤 My Profile":
             "city": profile[3] or "",
             "parent_name": profile[4] or "",
             "phone": profile[5] or "",
-            "favourite_subjects": json.loads(
-                profile[6] or "[]"
-            ),
-            "interests": json.loads(
-                profile[7] or "[]"
-            ),
-            "skills": json.loads(
-                profile[8] or "[]"
-            ),
+            "favourite_subjects": safe_school_json_list(profile[6]),
+            "interests": safe_school_json_list(profile[7]),
+            "skills": safe_school_json_list(profile[8]),
             "dream_career": profile[9] or "",
             "academic_goal": profile[10] or "",
             "achievements": profile[11] or ""
@@ -6915,15 +7688,13 @@ elif menu == "👤 My Profile":
             "achievements": ""
         }
 
-    st.info(
-        "Complete your profile to receive better career recommendations."
-    )
-
     with st.form("school_profile_form"):
 
-        first_column, second_column = st.columns(2)
+        st.subheader("🏫 Academic Information")
 
-        with first_column:
+        academic_col1, academic_col2 = st.columns(2)
+
+        with academic_col1:
 
             st.text_input(
                 "Full Name",
@@ -6939,8 +7710,17 @@ elif menu == "👤 My Profile":
 
             school_name = st.text_input(
                 "School Name *",
-                value=saved_profile["school_name"]
+                value=saved_profile["school_name"],
+                placeholder="Enter your school name"
             )
+
+            city = st.text_input(
+                "City",
+                value=saved_profile["city"],
+                placeholder="Enter your city"
+            )
+
+        with academic_col2:
 
             class_options = [
                 "6th Class",
@@ -6966,13 +7746,6 @@ elif menu == "👤 My Profile":
                 index=class_index
             )
 
-            city = st.text_input(
-                "City",
-                value=saved_profile["city"]
-            )
-
-        with second_column:
-
             board_options = [
                 "State Board",
                 "CBSE",
@@ -6997,12 +7770,75 @@ elif menu == "👤 My Profile":
 
             parent_name = st.text_input(
                 "Parent or Guardian Name",
-                value=saved_profile["parent_name"]
+                value=saved_profile["parent_name"],
+                placeholder="Enter parent or guardian name"
             )
 
             phone = st.text_input(
                 "Phone Number",
-                value=saved_profile["phone"]
+                value=saved_profile["phone"],
+                placeholder="Enter contact number"
+            )
+
+        st.subheader("📚 Subjects, Interests and Skills")
+
+        learning_col1, learning_col2 = st.columns(2)
+
+        with learning_col1:
+
+            favourite_subjects = st.multiselect(
+                "Favourite Subjects *",
+                [
+                    "Mathematics",
+                    "Physics",
+                    "Chemistry",
+                    "Biology",
+                    "Computer Science",
+                    "English",
+                    "Social Studies",
+                    "Commerce",
+                    "Economics",
+                    "Arts"
+                ],
+                default=saved_profile["favourite_subjects"]
+            )
+
+            interests = st.multiselect(
+                "Interests and Hobbies",
+                [
+                    "Coding",
+                    "Robotics",
+                    "Science Experiments",
+                    "Reading",
+                    "Writing",
+                    "Drawing",
+                    "Music",
+                    "Sports",
+                    "Public Speaking",
+                    "Business",
+                    "Photography",
+                    "Social Service"
+                ],
+                default=saved_profile["interests"]
+            )
+
+        with learning_col2:
+
+            skills = st.multiselect(
+                "Current Skills",
+                [
+                    "Basic Coding",
+                    "Problem Solving",
+                    "Communication",
+                    "Leadership",
+                    "Creativity",
+                    "Teamwork",
+                    "Mathematics",
+                    "Presentation",
+                    "Time Management",
+                    "Critical Thinking"
+                ],
+                default=saved_profile["skills"]
             )
 
             dream_career = st.text_input(
@@ -7011,75 +7847,30 @@ elif menu == "👤 My Profile":
                 placeholder="Example: Doctor or Software Engineer"
             )
 
-        st.markdown("### 📚 Academic Details")
+        st.subheader("🎯 Goals and Achievements")
 
-        favourite_subjects = st.multiselect(
-            "Favourite Subjects *",
-            [
-                "Mathematics",
-                "Physics",
-                "Chemistry",
-                "Biology",
-                "Computer Science",
-                "English",
-                "Social Studies",
-                "Commerce",
-                "Economics",
-                "Arts"
-            ],
-            default=saved_profile["favourite_subjects"]
-        )
+        goal_col1, goal_col2 = st.columns(2)
 
-        interests = st.multiselect(
-            "Interests and Hobbies",
-            [
-                "Coding",
-                "Robotics",
-                "Science Experiments",
-                "Reading",
-                "Writing",
-                "Drawing",
-                "Music",
-                "Sports",
-                "Public Speaking",
-                "Business",
-                "Photography",
-                "Social Service"
-            ],
-            default=saved_profile["interests"]
-        )
+        with goal_col1:
 
-        skills = st.multiselect(
-            "Current Skills",
-            [
-                "Basic Coding",
-                "Problem Solving",
-                "Communication",
-                "Leadership",
-                "Creativity",
-                "Teamwork",
-                "Mathematics",
-                "Presentation",
-                "Time Management",
-                "Critical Thinking"
-            ],
-            default=saved_profile["skills"]
-        )
+            academic_goal = st.text_area(
+                "Academic Goal",
+                value=saved_profile["academic_goal"],
+                placeholder="Example: Score above 90% in Mathematics",
+                height=140
+            )
 
-        academic_goal = st.text_area(
-            "Academic Goal",
-            value=saved_profile["academic_goal"],
-            placeholder="Example: Score above 90% in Mathematics"
-        )
+        with goal_col2:
 
-        achievements = st.text_area(
-            "Achievements",
-            value=saved_profile["achievements"],
-            placeholder="Mention awards, certificates or competitions"
-        )
+            achievements = st.text_area(
+                "Achievements",
+                value=saved_profile["achievements"],
+                placeholder="Mention awards, certificates or competitions",
+                height=140
+            )
 
         save_profile = st.form_submit_button(
-            "💾 Save Profile",
+            "💾 Save School Profile",
             width="stretch"
         )
 
@@ -7160,48 +7951,62 @@ elif menu == "👤 My Profile":
 
     if profile:
 
-        st.divider()
-        st.subheader("📋 Profile Summary")
+        st.write("")
+        st.markdown(
+            '<div class="studio-section-title">📋 Profile Summary</div>',
+            unsafe_allow_html=True
+        )
 
         summary1, summary2, summary3 = st.columns(3)
 
         with summary1:
 
-            st.markdown('<div class="profile-box">', unsafe_allow_html=True)
-            st.write(f"**Name:** {st.session_state.user_name}")
-            st.write(f"**School:** {saved_profile['school_name']}")
-            st.write(f"**Class:** {saved_profile['current_class']}")
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""<div class="studio-module-card">
+<div class="studio-kpi-icon">🏫</div>
+<h4>Academic Profile</h4>
+<p><strong>Name:</strong> {st.session_state.user_name}</p>
+<p><strong>School:</strong> {saved_profile['school_name']}</p>
+<p><strong>Class:</strong> {saved_profile['current_class']}</p>
+</div>""",
+                unsafe_allow_html=True
+            )
 
         with summary2:
 
-            st.markdown('<div class="profile-box">', unsafe_allow_html=True)
-            st.write(f"**Board:** {saved_profile['board']}")
-            st.write(f"**City:** {saved_profile['city'] or '-'}")
-            st.write(
-                f"**Career Goal:** "
-                f"{saved_profile['dream_career'] or '-'}"
+            st.markdown(
+                f"""<div class="studio-module-card">
+<div class="studio-kpi-icon">🎯</div>
+<h4>Career Direction</h4>
+<p><strong>Board:</strong> {saved_profile['board']}</p>
+<p><strong>City:</strong> {saved_profile['city'] or '-'}</p>
+<p><strong>Dream Career:</strong> {saved_profile['dream_career'] or '-'}</p>
+</div>""",
+                unsafe_allow_html=True
             )
-            st.markdown("</div>", unsafe_allow_html=True)
 
         with summary3:
 
-            st.markdown('<div class="profile-box">', unsafe_allow_html=True)
-            st.write(
-                "**Subjects:** "
-                + ", ".join(saved_profile["favourite_subjects"])
+            subject_text = (
+                ", ".join(saved_profile["favourite_subjects"])
+                if saved_profile["favourite_subjects"]
+                else "-"
+            )
+            skill_text = (
+                ", ".join(saved_profile["skills"])
+                if saved_profile["skills"]
+                else "-"
             )
 
-            st.write(
-                "**Skills:** "
-                + (
-                    ", ".join(saved_profile["skills"])
-                    if saved_profile["skills"]
-                    else "-"
-                )
+            st.markdown(
+                f"""<div class="studio-module-card">
+<div class="studio-kpi-icon">💡</div>
+<h4>Learning Profile</h4>
+<p><strong>Subjects:</strong> {subject_text}</p>
+<p><strong>Skills:</strong> {skill_text}</p>
+</div>""",
+                unsafe_allow_html=True
             )
-
-            st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ==========================================================
@@ -10547,6 +11352,1224 @@ elif menu == "📄 My Report":
             "Add goals in the Goal Tracker."
         )
 
+
+# ==========================================================
+# WORKING PROFESSIONAL MODULE
+# ==========================================================
+
+elif menu == "👨‍💼 Professional Profile":
+    profile = get_professional_profile(st.session_state.user_id)
+    metrics = professional_metrics(profile)
+
+    st.markdown(f"""
+    <div class="studio-hero">
+        <span class="studio-badge">TalentSphere Professional Profile</span>
+        <h1>Build your next career chapter.</h1>
+        <p>Keep your experience, technical strengths, leadership exposure and career goals in one professional workspace. Profile completion: <strong>{metrics['Profile Completion']}%</strong>.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.form("professional_profile_form"):
+        st.markdown('<div class="studio-section-title">🏢 Professional Information</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            current_company = st.text_input("Current Company", value=profile.get("current_company", ""))
+            current_role = st.text_input("Current Role", value=profile.get("current_role", ""))
+            department = st.text_input("Department", value=profile.get("department", ""))
+            total_experience = st.number_input("Total Experience (Years)", min_value=0.0, max_value=50.0, step=0.5, value=float(profile.get("total_experience") or 0))
+            employment_type = st.selectbox("Employment Type", ["Full-time", "Part-time", "Contract", "Freelance", "Consultant", "Other"], index=["Full-time", "Part-time", "Contract", "Freelance", "Consultant", "Other"].index(profile.get("employment_type")) if profile.get("employment_type") in ["Full-time", "Part-time", "Contract", "Freelance", "Consultant", "Other"] else 0)
+        with c2:
+            current_location = st.text_input("Current Location", value=profile.get("current_location", ""))
+            work_mode = st.selectbox("Work Mode", ["On-site", "Hybrid", "Remote"], index=["On-site", "Hybrid", "Remote"].index(profile.get("work_mode")) if profile.get("work_mode") in ["On-site", "Hybrid", "Remote"] else 1)
+            phone = st.text_input("Phone Number", value=profile.get("phone", ""))
+            highest_qualification = st.text_input("Highest Qualification", value=profile.get("highest_qualification", ""))
+            notice_period = st.selectbox("Notice Period", ["Immediate", "15 Days", "30 Days", "60 Days", "90 Days", "More than 90 Days"], index=["Immediate", "15 Days", "30 Days", "60 Days", "90 Days", "More than 90 Days"].index(profile.get("notice_period")) if profile.get("notice_period") in ["Immediate", "15 Days", "30 Days", "60 Days", "90 Days", "More than 90 Days"] else 2)
+
+        st.markdown('<div class="studio-section-title">💻 Technical Profile</div>', unsafe_allow_html=True)
+        t1, t2 = st.columns(2)
+        with t1:
+            technical_skills = st.text_area("Technical Skills (comma separated)", value=profile.get("technical_skills", ""), height=100)
+            programming_languages = st.text_input("Programming Languages", value=profile.get("programming_languages", ""))
+            frameworks = st.text_input("Frameworks", value=profile.get("frameworks", ""))
+            databases = st.text_input("Databases", value=profile.get("databases", ""))
+        with t2:
+            cloud_platforms = st.text_input("Cloud Platforms", value=profile.get("cloud_platforms", ""))
+            devops_tools = st.text_input("DevOps Tools", value=profile.get("devops_tools", ""))
+            certifications = st.text_area("Certifications", value=profile.get("certifications", ""), height=100)
+
+        st.markdown('<div class="studio-section-title">🧭 Leadership & Career Goals</div>', unsafe_allow_html=True)
+        l1, l2 = st.columns(2)
+        with l1:
+            leadership_experience = st.text_area("Leadership Experience", value=profile.get("leadership_experience", ""), height=110)
+            team_size = st.number_input("Largest Team Size Led", min_value=0, max_value=500, value=int(profile.get("team_size") or 0))
+            projects_led = st.number_input("Projects Led", min_value=0, max_value=200, value=int(profile.get("projects_led") or 0))
+            mentoring_experience = st.text_area("Mentoring Experience", value=profile.get("mentoring_experience", ""), height=90)
+            communication_options = ["Beginner", "Intermediate", "Advanced", "Expert"]
+            communication_level = st.selectbox("Communication Level", communication_options, index=communication_options.index(profile.get("communication_level")) if profile.get("communication_level") in communication_options else 1)
+        with l2:
+            career_goal = st.text_area("Career Goal", value=profile.get("career_goal", ""), height=110)
+            preferred_roles = st.text_input("Preferred Job Roles", value=profile.get("preferred_roles", ""))
+            target_company = st.text_input("Target Company", value=profile.get("target_company", ""))
+            preferred_location = st.text_input("Preferred Location", value=profile.get("preferred_location", ""))
+            current_salary = st.number_input("Current Salary (LPA)", min_value=0.0, max_value=500.0, step=0.5, value=float(profile.get("current_salary") or 0))
+            expected_salary = st.number_input("Expected Salary (LPA)", min_value=0.0, max_value=500.0, step=0.5, value=float(profile.get("expected_salary") or 0))
+
+        st.markdown('<div class="studio-section-title">🔗 Professional Links</div>', unsafe_allow_html=True)
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            linkedin_url = st.text_input("LinkedIn URL", value=profile.get("linkedin_url", ""))
+        with p2:
+            github_url = st.text_input("GitHub URL", value=profile.get("github_url", ""))
+        with p3:
+            portfolio_url = st.text_input("Portfolio URL", value=profile.get("portfolio_url", ""))
+
+        save_professional = st.form_submit_button("💾 Save Professional Profile", width="stretch")
+
+    if save_professional:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("""
+            INSERT INTO professional_profiles (
+                user_id, current_company, current_role, department, total_experience,
+                employment_type, current_location, work_mode, phone, highest_qualification,
+                technical_skills, programming_languages, frameworks, databases,
+                cloud_platforms, devops_tools, certifications, leadership_experience,
+                team_size, projects_led, mentoring_experience, communication_level,
+                career_goal, preferred_roles, target_company, preferred_location,
+                current_salary, expected_salary, notice_period, linkedin_url,
+                github_url, portfolio_url, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                current_company=excluded.current_company, current_role=excluded.current_role,
+                department=excluded.department, total_experience=excluded.total_experience,
+                employment_type=excluded.employment_type, current_location=excluded.current_location,
+                work_mode=excluded.work_mode, phone=excluded.phone,
+                highest_qualification=excluded.highest_qualification,
+                technical_skills=excluded.technical_skills,
+                programming_languages=excluded.programming_languages,
+                frameworks=excluded.frameworks, databases=excluded.databases,
+                cloud_platforms=excluded.cloud_platforms, devops_tools=excluded.devops_tools,
+                certifications=excluded.certifications,
+                leadership_experience=excluded.leadership_experience,
+                team_size=excluded.team_size, projects_led=excluded.projects_led,
+                mentoring_experience=excluded.mentoring_experience,
+                communication_level=excluded.communication_level,
+                career_goal=excluded.career_goal, preferred_roles=excluded.preferred_roles,
+                target_company=excluded.target_company,
+                preferred_location=excluded.preferred_location,
+                current_salary=excluded.current_salary, expected_salary=excluded.expected_salary,
+                notice_period=excluded.notice_period, linkedin_url=excluded.linkedin_url,
+                github_url=excluded.github_url, portfolio_url=excluded.portfolio_url,
+                updated_at=excluded.updated_at
+        """, (
+            st.session_state.user_id, current_company, current_role, department,
+            total_experience, employment_type, current_location, work_mode, phone,
+            highest_qualification, technical_skills, programming_languages,
+            frameworks, databases, cloud_platforms, devops_tools, certifications,
+            leadership_experience, team_size, projects_led, mentoring_experience,
+            communication_level, career_goal, preferred_roles, target_company,
+            preferred_location, current_salary, expected_salary, notice_period,
+            linkedin_url, github_url, portfolio_url, datetime.now().isoformat()
+        ))
+        connection.commit()
+        connection.close()
+        st.success("Professional profile saved successfully.")
+        st.rerun()
+
+elif menu == "🏢 Professional Dashboard":
+    profile = get_professional_profile(st.session_state.user_id)
+    metrics = professional_metrics(profile)
+    matches = professional_role_matches(profile, metrics)
+    top_role, top_score = matches[0]
+    current_role = profile.get("current_role") or "Complete your profile"
+    experience = float(profile.get("total_experience") or 0)
+
+    st.markdown(f"""
+    <div class="studio-hero">
+        <span class="studio-badge">TalentSphere Professional Dashboard</span>
+        <h1>Accelerate your professional growth.</h1>
+        <p>Welcome, {st.session_state.user_name}. Track promotion readiness, market-aligned skills, salary growth and next-level career opportunities in one workspace.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    cols = st.columns(4)
+    kpis = [
+        ("💼", "Current Role", current_role, f"{experience:g} years experience"),
+        ("📈", "Promotion Readiness", f"{metrics['Promotion Readiness']}%", "Technical + leadership + communication"),
+        ("💰", "Salary Growth Potential", f"+{max(0, metrics['Salary Growth'])}%", "Based on your expected salary"),
+        ("🎯", "Top Job Match", f"{top_score}%", top_role)
+    ]
+    for col, (icon, label, value, sub) in zip(cols, kpis):
+        with col:
+            st.markdown(f'<div class="studio-kpi"><div class="studio-kpi-icon">{icon}</div><div class="studio-kpi-label">{label}</div><div class="studio-kpi-value">{value}</div><div class="studio-kpi-sub">{sub}</div></div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="studio-section-title">🧠 Professional Growth Intelligence</div>', unsafe_allow_html=True)
+    left, right = st.columns([1.55, 1])
+    with left:
+        skill_df = pd.DataFrame({"Skill": ["Backend Development", "System Design", "Cloud Computing", "DevOps", "Leadership"], "Score": [metrics["Backend Development"], metrics["System Design"], metrics["Cloud Computing"], metrics["DevOps"], metrics["Leadership"]]})
+        chart = px.bar(skill_df, x="Score", y="Skill", orientation="h", text="Score", title="Current Skill Progress")
+        chart.update_layout(height=390, xaxis_range=[0,100], margin=dict(l=10,r=10,t=55,b=10))
+        st.plotly_chart(chart, width="stretch")
+    with right:
+        st.markdown('<div class="studio-panel"><h3>Recommended Next Steps</h3>', unsafe_allow_html=True)
+        steps = ["Complete one cloud certification", "Build Docker and Kubernetes skills", "Study system design and microservices", "Lead or mentor on one visible project"]
+        for i, step in enumerate(steps,1):
+            st.markdown(f'<div class="studio-action"><strong>{i}. {step}</strong><br><span>High-impact professional growth activity</span></div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+elif menu == "📚 Professional Learning & Skill Development":
+    profile = get_professional_profile(st.session_state.user_id)
+
+    st.markdown("""
+    <style>
+    .learn-hero{
+        position:relative; overflow:hidden;
+        padding:38px 40px; border-radius:28px;
+        background:
+          radial-gradient(circle at 88% 18%,rgba(255,255,255,.18),transparent 25%),
+          linear-gradient(135deg,#2938d6 0%,#4f46e5 50%,#7c3aed 100%);
+        box-shadow:0 22px 55px rgba(79,70,229,.24);
+        margin-bottom:24px;
+    }
+    .learn-hero:after{
+        content:""; position:absolute; right:-55px; bottom:-95px;
+        width:260px; height:260px; border-radius:50%;
+        border:38px solid rgba(255,255,255,.09);
+    }
+    .learn-badge{
+        display:inline-flex; padding:7px 12px; border-radius:999px;
+        background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.24);
+        color:#fff!important; font-size:11px; font-weight:800;
+        text-transform:uppercase; letter-spacing:.08em;
+    }
+    .learn-hero h1{
+        color:#fff!important; font-size:42px!important; line-height:1.08!important;
+        letter-spacing:-.035em; margin:16px 0 10px!important; max-width:800px;
+    }
+    .learn-hero p{
+        color:rgba(255,255,255,.9)!important; font-size:15px!important;
+        line-height:1.7!important; margin:0!important; max-width:820px;
+    }
+    .learn-stat{
+        background:#fff; border:1px solid #e5e9f2; border-radius:18px;
+        padding:18px 20px; box-shadow:0 8px 24px rgba(15,23,42,.055);
+        min-height:118px;
+    }
+    .learn-stat-label{
+        color:#667085!important; font-size:11px; font-weight:800;
+        text-transform:uppercase; letter-spacing:.07em; margin-bottom:8px;
+    }
+    .learn-stat-value{color:#101828!important; font-size:23px; font-weight:850; line-height:1.15}
+    .learn-stat-sub{color:#98a2b3!important; font-size:11px; margin-top:7px}
+    .learn-card{
+        background:#fff; border:1px solid #e6eaf2; border-radius:20px;
+        padding:20px; box-shadow:0 9px 26px rgba(15,23,42,.05); height:100%;
+    }
+    .learn-card h3{color:#101828!important; font-size:18px!important; margin:0 0 8px!important}
+    .learn-card p{color:#667085!important; font-size:13px!important; line-height:1.6!important}
+    .learn-icon{
+        width:42px;height:42px;border-radius:13px;background:#eef2ff;
+        display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px;
+    }
+    .learn-chip{
+        display:inline-block; padding:6px 10px; margin:4px 5px 4px 0;
+        border-radius:999px; background:#f3f4f6; color:#475467!important;
+        border:1px solid #eaecf0; font-size:11px; font-weight:700;
+    }
+    .learn-road{
+        background:#fff; border:1px solid #e6eaf2; border-left:4px solid #4f46e5;
+        border-radius:15px; padding:15px 17px; margin-bottom:10px;
+        box-shadow:0 5px 16px rgba(15,23,42,.04);
+    }
+    .learn-road-week{color:#4f46e5!important;font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.07em}
+    .learn-road-title{color:#101828!important;font-weight:800;margin-top:4px}
+    .learn-road-sub{color:#667085!important;font-size:12px;margin-top:4px}
+    .learn-project{
+        background:#fff;border:1px solid #e6eaf2;border-radius:18px;padding:19px;
+        min-height:165px;box-shadow:0 8px 22px rgba(15,23,42,.05)
+    }
+    .learn-project-level{font-size:10px;font-weight:850;color:#4f46e5!important;text-transform:uppercase;letter-spacing:.08em}
+    .learn-project-title{font-size:17px;font-weight:850;color:#101828!important;margin:8px 0}
+    .learn-project-desc{font-size:12px;color:#667085!important;line-height:1.55}
+    div[data-testid="stTabs"] [data-baseweb="tab-list"]{
+        gap:6px!important; background:#fff!important; border:1px solid #e7eaf1!important;
+        padding:6px!important; border-radius:15px!important; box-shadow:0 6px 18px rgba(15,23,42,.04);
+    }
+    div[data-testid="stTabs"] button{
+        border-radius:10px!important; padding:10px 14px!important; font-weight:700!important;
+    }
+    div[data-testid="stExpander"]{
+        background:#fff!important;border:1px solid #e6eaf2!important;
+        border-radius:14px!important;box-shadow:0 5px 15px rgba(15,23,42,.035)!important;
+        margin-bottom:9px!important;
+    }
+    </style>
+
+    <div class="learn-hero">
+        <span class="learn-badge">Professional Learning Academy</span>
+        <h1>Build job-ready skills with a clear learning path.</h1>
+        <p>Choose a professional track, study structured course material, follow a
+        six-week roadmap, practise with hands-on tasks, build portfolio projects
+        and take the final technical assessment only after learning.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    learning_tracks = {
+        "Backend Development": {
+            "icon": "⚙️",
+            "summary": "Build secure, scalable server-side applications and production-ready REST APIs.",
+            "roles": ["Backend Engineer", "API Developer", "Software Engineer", "Senior Backend Engineer"],
+            "prerequisites": ["Programming fundamentals", "Basic Python or Java", "Basic SQL", "Git fundamentals"],
+            "modules": [
+                ("1. Backend Foundations", "Client-server architecture, HTTP/HTTPS, request-response lifecycle, REST principles, JSON, status codes and API design conventions."),
+                ("2. Python for Backend", "Functions, OOP, modules, exceptions, virtual environments, type hints, package management and clean-code practices."),
+                ("3. FastAPI & REST APIs", "Routes, path/query parameters, Pydantic models, validation, CRUD APIs, dependency injection, Swagger documentation and async endpoints."),
+                ("4. Databases & SQL", "Relational modelling, primary/foreign keys, joins, indexes, transactions, SQLite/PostgreSQL integration and ORM concepts."),
+                ("5. Authentication & Security", "Password hashing, JWT authentication, RBAC, CORS, input validation, secrets management and common API security practices."),
+                ("6. Production Engineering", "Testing, logging, caching, Docker, environment configuration, CI/CD basics, monitoring and cloud deployment.")
+            ],
+            "roadmap": [
+                ("Week 1", "HTTP, REST, JSON and Python refresh"),
+                ("Week 2", "FastAPI fundamentals and CRUD APIs"),
+                ("Week 3", "SQL, database design and persistence"),
+                ("Week 4", "JWT, RBAC and API security"),
+                ("Week 5", "Testing, Docker and deployment"),
+                ("Week 6", "Build and document a production-style backend project")
+            ],
+            "practice": [
+                "Create GET, POST, PUT and DELETE endpoints for a task manager.",
+                "Design users, roles and tasks tables with relationships.",
+                "Implement registration, login and JWT-protected routes.",
+                "Add validation and meaningful HTTP status codes.",
+                "Write API tests and containerise the application with Docker."
+            ],
+            "projects": [
+                ("Starter", "Task Management REST API", "CRUD + SQLite + validation"),
+                ("Intermediate", "Authentication & RBAC API", "JWT + roles + protected routes"),
+                ("Portfolio", "E-commerce Backend", "Users + products + orders + payments mock + deployment")
+            ],
+            "quiz": [
+                ("Which HTTP method is normally used to create a resource?", ["GET", "POST", "DELETE", "PATCH"], "POST"),
+                ("Which status code represents a successful resource creation?", ["200", "201", "301", "404"], "201"),
+                ("What is the main purpose of JWT?", ["Database indexing", "Authentication/authorization", "CSS styling", "File compression"], "Authentication/authorization"),
+                ("Which SQL operation combines related rows from tables?", ["JOIN", "DROP", "VACUUM", "ALTER"], "JOIN"),
+                ("Why is password hashing used?", ["To display passwords", "To avoid storing plain-text passwords", "To speed up HTML", "To create database IDs"], "To avoid storing plain-text passwords")
+            ]
+        },
+        "System Design": {
+            "icon": "🏗️",
+            "summary": "Learn to design reliable, scalable and maintainable software systems.",
+            "roles": ["Senior Software Engineer", "Backend Architect", "Solutions Architect", "Tech Lead"],
+            "prerequisites": ["Backend fundamentals", "Databases", "HTTP/APIs", "Basic networking"],
+            "modules": [
+                ("1. Design Fundamentals", "Requirements, functional/non-functional requirements, latency, throughput, availability, reliability and scalability."),
+                ("2. Architecture Patterns", "Monoliths, layered architecture, microservices, event-driven systems and service boundaries."),
+                ("3. Data Layer", "SQL vs NoSQL, replication, partitioning, indexing, consistency, transactions and data modelling."),
+                ("4. Scaling Components", "Load balancers, horizontal scaling, caching, CDNs, queues and asynchronous processing."),
+                ("5. Reliability", "Retries, timeouts, circuit breakers, idempotency, redundancy, observability and disaster recovery."),
+                ("6. Design Interviews", "Capacity estimation, API design, high-level design, bottleneck analysis and trade-off communication.")
+            ],
+            "roadmap": [
+                ("Week 1", "Scalability, latency, availability and estimation"),
+                ("Week 2", "Databases, caching and data consistency"),
+                ("Week 3", "Load balancing, queues and distributed systems"),
+                ("Week 4", "Microservices and reliability patterns"),
+                ("Week 5", "Design URL shortener, chat and notification systems"),
+                ("Week 6", "Complete two timed system-design case studies")
+            ],
+            "practice": [
+                "Estimate traffic and storage for a URL shortener.",
+                "Choose SQL or NoSQL for three different use cases and justify each.",
+                "Draw a scalable architecture for a notification service.",
+                "Identify single points of failure in a sample architecture.",
+                "Explain caching and invalidation strategy for a read-heavy service."
+            ],
+            "projects": [
+                ("Starter", "URL Shortener Design", "APIs + database + cache"),
+                ("Intermediate", "Notification Platform", "Queue + workers + retries"),
+                ("Portfolio", "Scalable E-commerce Architecture", "Services + cache + database + observability")
+            ],
+            "quiz": [
+                ("What does a load balancer primarily do?", ["Encrypt a database", "Distribute traffic", "Compile code", "Store passwords"], "Distribute traffic"),
+                ("Caching is most useful for what?", ["Reducing repeated expensive reads", "Increasing source-code size", "Replacing authentication", "Creating CSS"], "Reducing repeated expensive reads"),
+                ("Horizontal scaling means:", ["Adding more machines/instances", "Adding RAM only", "Deleting servers", "Changing language"], "Adding more machines/instances"),
+                ("A message queue helps with:", ["Asynchronous processing", "HTML layout", "Password display", "DNS registration"], "Asynchronous processing"),
+                ("Replication mainly improves:", ["Availability/read capacity", "CSS quality", "Variable naming", "File extensions"], "Availability/read capacity")
+            ]
+        },
+        "Cloud Computing": {
+            "icon": "☁️",
+            "summary": "Understand cloud infrastructure, deployment, storage, networking and scalable services.",
+            "roles": ["Cloud Engineer", "Cloud Developer", "Solutions Architect", "Platform Engineer"],
+            "prerequisites": ["Networking basics", "Linux basics", "Application fundamentals"],
+            "modules": [
+                ("1. Cloud Fundamentals", "IaaS, PaaS, SaaS, regions, availability zones, shared responsibility and cloud economics."),
+                ("2. Compute & Storage", "Virtual machines, serverless, object/block storage, autoscaling and managed services."),
+                ("3. Networking", "VPC/VNet concepts, subnets, routing, security groups, DNS and load balancing."),
+                ("4. Identity & Security", "IAM, least privilege, secrets, encryption, logging and cloud security basics."),
+                ("5. Databases & Reliability", "Managed SQL/NoSQL, backups, replication, high availability and disaster recovery."),
+                ("6. Cloud Architecture", "Cost optimisation, monitoring, scalable architecture and deployment patterns.")
+            ],
+            "roadmap": [
+                ("Week 1", "Cloud concepts, IAM and networking"),
+                ("Week 2", "Compute, storage and databases"),
+                ("Week 3", "Deploy an application to a cloud platform"),
+                ("Week 4", "Monitoring, scaling, security and backups"),
+                ("Week 5", "Serverless and managed services"),
+                ("Week 6", "Architecture project + certification revision")
+            ],
+            "practice": [
+                "Map a traditional web application to cloud services.",
+                "Design a VPC with public and private application tiers.",
+                "Create an IAM least-privilege permission plan.",
+                "Plan backups and recovery for a production database.",
+                "Compare VM, container and serverless deployment choices."
+            ],
+            "projects": [
+                ("Starter", "Static Website Deployment", "Storage + CDN concepts"),
+                ("Intermediate", "Cloud-hosted API", "Compute + database + IAM"),
+                ("Portfolio", "Highly Available Web Architecture", "Load balancer + autoscaling + monitoring")
+            ],
+            "quiz": [
+                ("IaaS provides:", ["Virtual infrastructure", "Only email", "Only source code", "Only databases"], "Virtual infrastructure"),
+                ("IAM is used for:", ["Identity and access control", "Image editing", "SQL joins", "CSS"], "Identity and access control"),
+                ("Autoscaling helps:", ["Adjust compute capacity to demand", "Rename files", "Write resumes", "Tokenize text"], "Adjust compute capacity to demand"),
+                ("Object storage is suitable for:", ["Files and media objects", "CPU registers", "HTML variables", "Password hashing only"], "Files and media objects"),
+                ("Availability zones help improve:", ["Resilience", "Font size", "Programming syntax", "Git usernames"], "Resilience")
+            ]
+        },
+        "DevOps": {
+            "icon": "♾️",
+            "summary": "Automate software delivery using Git, CI/CD, containers, orchestration and observability.",
+            "roles": ["DevOps Engineer", "Platform Engineer", "SRE", "Cloud DevOps Engineer"],
+            "prerequisites": ["Linux basics", "Git", "Application deployment basics", "Networking basics"],
+            "modules": [
+                ("1. DevOps Foundations", "DevOps culture, SDLC, Git workflows, branching and release practices."),
+                ("2. Linux & Automation", "Shell basics, processes, permissions, environment variables and scripting."),
+                ("3. CI/CD", "Build-test-deploy pipelines, quality gates, artifacts and deployment strategies."),
+                ("4. Docker", "Images, containers, Dockerfiles, volumes, networks and Compose."),
+                ("5. Kubernetes", "Pods, deployments, services, config, secrets, scaling and rolling updates."),
+                ("6. Observability", "Logs, metrics, alerts, monitoring, incident response and reliability basics.")
+            ],
+            "roadmap": [
+                ("Week 1", "Git, Linux and shell automation"),
+                ("Week 2", "CI pipeline for an existing application"),
+                ("Week 3", "Docker and Compose"),
+                ("Week 4", "Kubernetes fundamentals"),
+                ("Week 5", "Monitoring, logging and deployment strategies"),
+                ("Week 6", "End-to-end automated deployment project")
+            ],
+            "practice": [
+                "Create a clean Git branching workflow.",
+                "Write a Dockerfile for a Python web application.",
+                "Create a CI workflow that runs tests automatically.",
+                "Deploy a container using Kubernetes deployment and service concepts.",
+                "Define monitoring signals for a production API."
+            ],
+            "projects": [
+                ("Starter", "Dockerised Web App", "Dockerfile + Compose"),
+                ("Intermediate", "CI/CD Pipeline", "Test + build + deployment workflow"),
+                ("Portfolio", "Kubernetes Deployment", "App + service + scaling + observability plan")
+            ],
+            "quiz": [
+                ("A Docker image is:", ["A container template", "A database row", "A cloud region", "A password"], "A container template"),
+                ("CI primarily means:", ["Continuous Integration", "Cloud Internet", "Code Inspection only", "Container Instance"], "Continuous Integration"),
+                ("Kubernetes is mainly used for:", ["Container orchestration", "PDF extraction", "Resume writing", "SQL syntax"], "Container orchestration"),
+                ("A CI/CD pipeline should commonly run:", ["Automated tests", "Only screenshots", "Manual passwords", "Nothing"], "Automated tests"),
+                ("Observability commonly uses:", ["Logs, metrics and traces", "Only CSS", "Only Git branches", "Only PDFs"], "Logs, metrics and traces")
+            ]
+        },
+        "Leadership": {
+            "icon": "🧭",
+            "summary": "Develop team leadership, mentoring, ownership, decision-making and delivery skills.",
+            "roles": ["Tech Lead", "Engineering Lead", "Team Lead", "Engineering Manager"],
+            "prerequisites": ["Professional experience", "Team collaboration", "Basic communication skills"],
+            "modules": [
+                ("1. Leadership Mindset", "Ownership, accountability, trust, influence and leading without authority."),
+                ("2. Team Coordination", "Planning, delegation, prioritisation, meetings and delivery tracking."),
+                ("3. Mentoring & Feedback", "Coaching, constructive feedback, one-to-ones and knowledge sharing."),
+                ("4. Decision Making", "Trade-offs, risk analysis, data-informed decisions and escalation."),
+                ("5. Conflict Resolution", "Active listening, difficult conversations, negotiation and psychological safety."),
+                ("6. Technical Leadership", "Architecture influence, code quality, project ownership and stakeholder alignment.")
+            ],
+            "roadmap": [
+                ("Week 1", "Ownership and communication habits"),
+                ("Week 2", "Delegation and planning"),
+                ("Week 3", "Mentor one colleague"),
+                ("Week 4", "Lead a meeting or technical discussion"),
+                ("Week 5", "Own a measurable delivery improvement"),
+                ("Week 6", "Document impact and request structured feedback")
+            ],
+            "practice": [
+                "Write a delegation plan for a small project.",
+                "Prepare constructive feedback using situation-behaviour-impact.",
+                "Create a decision record for a technical trade-off.",
+                "Plan a one-to-one mentoring conversation.",
+                "Write a concise project status update for stakeholders."
+            ],
+            "projects": [
+                ("Starter", "Team Improvement Plan", "Goals + responsibilities + communication"),
+                ("Intermediate", "Mentoring Sprint", "Four-week mentoring and feedback plan"),
+                ("Portfolio", "Technical Initiative Leadership", "Proposal + execution + measurable impact")
+            ],
+            "quiz": [
+                ("Effective delegation should include:", ["Clear outcome and ownership", "No context", "No deadline ever", "Only criticism"], "Clear outcome and ownership"),
+                ("Constructive feedback should be:", ["Specific and actionable", "Personal and vague", "Publicly embarrassing", "Unrelated"], "Specific and actionable"),
+                ("A strong leader handles conflict by:", ["Listening and addressing the issue", "Ignoring everyone", "Blaming immediately", "Avoiding all discussion"], "Listening and addressing the issue"),
+                ("Mentoring primarily helps:", ["Develop another person's capability", "Hide knowledge", "Avoid teamwork", "Remove documentation"], "Develop another person's capability"),
+                ("Ownership means:", ["Taking responsibility for outcomes", "Doing every task alone", "Avoiding decisions", "Never asking for help"], "Taking responsibility for outcomes")
+            ]
+        },
+        "Communication": {
+            "icon": "💬",
+            "summary": "Communicate technical ideas clearly across teams, interviews, meetings and stakeholders.",
+            "roles": ["All Professional Roles", "Tech Lead", "Consultant", "Engineering Manager"],
+            "prerequisites": ["No technical prerequisite"],
+            "modules": [
+                ("1. Professional Communication", "Clarity, structure, audience awareness, tone and concise writing."),
+                ("2. Technical Explanation", "Explaining architecture, code, incidents and trade-offs to technical and non-technical audiences."),
+                ("3. Meetings & Collaboration", "Agendas, active listening, questions, notes, decisions and action items."),
+                ("4. Presentations", "Story structure, slide discipline, demonstrations, confidence and handling questions."),
+                ("5. Written Communication", "Professional email, status updates, documentation and asynchronous communication."),
+                ("6. Interview Communication", "STAR method, project explanation, behavioural answers and technical reasoning.")
+            ],
+            "roadmap": [
+                ("Week 1", "Clear writing and concise status updates"),
+                ("Week 2", "Technical explanations"),
+                ("Week 3", "Meeting and listening skills"),
+                ("Week 4", "Five-minute professional presentation"),
+                ("Week 5", "Behavioural interview practice"),
+                ("Week 6", "Record, review and improve a complete project presentation")
+            ],
+            "practice": [
+                "Summarise a technical issue in five sentences for a manager.",
+                "Explain an API to a non-technical stakeholder.",
+                "Write meeting notes with decisions and owners.",
+                "Prepare a two-minute STAR answer.",
+                "Record a five-minute project explanation and review clarity."
+            ],
+            "projects": [
+                ("Starter", "Professional Update Pack", "Email + status update + meeting notes"),
+                ("Intermediate", "Technical Presentation", "5–7 minute architecture explanation"),
+                ("Portfolio", "Interview Communication Pack", "Introduction + project pitch + STAR stories")
+            ],
+            "quiz": [
+                ("The STAR method stands for:", ["Situation, Task, Action, Result", "System, Test, API, REST", "Skill, Tool, Aim, Review", "None"], "Situation, Task, Action, Result"),
+                ("A good status update should be:", ["Concise and action-oriented", "Vague", "Extremely unrelated", "Without outcomes"], "Concise and action-oriented"),
+                ("Active listening includes:", ["Clarifying and confirming understanding", "Interrupting constantly", "Ignoring questions", "Changing topic"], "Clarifying and confirming understanding"),
+                ("Technical communication should change based on:", ["Audience", "Random choice", "File size", "Screen colour"], "Audience"),
+                ("Good meeting notes include:", ["Decisions and action owners", "Only greetings", "Passwords", "No next steps"], "Decisions and action owners")
+            ]
+        }
+    }
+
+    track_names = list(learning_tracks.keys())
+    current_track = st.session_state.get("professional_learning_track", track_names[0])
+    if current_track not in track_names:
+        current_track = track_names[0]
+
+    selected_track = st.selectbox(
+        "Choose your learning track",
+        track_names,
+        index=track_names.index(current_track)
+    )
+    st.session_state.professional_learning_track = selected_track
+    course = learning_tracks[selected_track]
+
+    # Premium course header
+    stat_cols = st.columns(4)
+    stats = [
+        ("Selected Track", selected_track, "Professional learning path"),
+        ("Course Modules", str(len(course["modules"])), "Structured lessons"),
+        ("Roadmap", "6 Weeks", "Step-by-step learning"),
+        ("Final Quiz", f"{len(course['quiz'])} Qs", "Taken after learning"),
+    ]
+    for col, (label, value, sub) in zip(stat_cols, stats):
+        with col:
+            st.markdown(
+                f'<div class="learn-stat"><div class="learn-stat-label">{label}</div>'
+                f'<div class="learn-stat-value">{value}</div>'
+                f'<div class="learn-stat-sub">{sub}</div></div>',
+                unsafe_allow_html=True
+            )
+
+    st.write("")
+    st.markdown(
+        f'<div class="learn-card"><div class="learn-icon">{course["icon"]}</div>'
+        f'<h3>{selected_track}</h3><p>{course["summary"]}</p>'
+        f'<span class="learn-chip">Industry focused</span>'
+        f'<span class="learn-chip">6-week roadmap</span>'
+        f'<span class="learn-chip">Projects included</span>'
+        f'<span class="learn-chip">Final assessment</span></div>',
+        unsafe_allow_html=True
+    )
+
+    overview_tab, roadmap_tab, modules_tab, projects_tab, practice_tab, quiz_tab = st.tabs([
+        "Overview", "Roadmap", "Modules", "Projects", "Practice", "Quiz & Results"
+    ])
+
+    with overview_tab:
+        st.markdown("### About this learning track")
+        a, b = st.columns(2)
+        with a:
+            roles_html = "".join(f'<span class="learn-chip">{role}</span>' for role in course["roles"])
+            st.markdown(
+                '<div class="learn-card"><div class="learn-icon">🎯</div>'
+                '<h3>Career outcomes</h3><p>This learning path prepares you for roles such as:</p>'
+                f'{roles_html}</div>',
+                unsafe_allow_html=True
+            )
+        with b:
+            prereq_html = "".join(f'<span class="learn-chip">{item}</span>' for item in course["prerequisites"])
+            st.markdown(
+                '<div class="learn-card"><div class="learn-icon">✅</div>'
+                '<h3>Recommended prerequisites</h3><p>Start comfortably if you already know:</p>'
+                f'{prereq_html}</div>',
+                unsafe_allow_html=True
+            )
+
+        st.write("")
+        st.info(
+            "Recommended sequence: Overview → Roadmap → Modules → Practice → "
+            "Projects → Quiz. The assessment is intended to validate what you learned."
+        )
+
+    with roadmap_tab:
+        st.markdown(f"### {selected_track} learning roadmap")
+        st.caption("Complete one milestone each week and build practical evidence as you progress.")
+        for index, (week, focus) in enumerate(course["roadmap"], 1):
+            st.markdown(
+                f'<div class="learn-road"><div class="learn-road-week">Phase {index} · {week}</div>'
+                f'<div class="learn-road-title">{focus}</div>'
+                f'<div class="learn-road-sub">Study the related module, complete practice and save your notes/code.</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+    with modules_tab:
+        st.markdown("### Structured course material")
+        st.caption("Open each module in order. Every module includes the core concept and an application-focused learning outcome.")
+        for idx, (title, material) in enumerate(course["modules"], 1):
+            with st.expander(title, expanded=(idx == 1)):
+                st.markdown(f"**What you will learn**")
+                st.write(material)
+                st.markdown("**Learning outcome**")
+                st.write(
+                    "Explain the concept clearly, identify when it is used in industry, "
+                    "and apply it in a practical task or project."
+                )
+                st.markdown("**Completion checklist**")
+                st.checkbox("I reviewed the concepts", key=f"pro_module_read_{selected_track}_{idx}")
+                st.checkbox("I completed a small practice task", key=f"pro_module_practice_{selected_track}_{idx}")
+
+    with projects_tab:
+        st.markdown("### Project-based learning")
+        st.caption("Projects turn the course into portfolio evidence. Progress from starter to portfolio level.")
+        cols = st.columns(3)
+        for col, (level, project, build) in zip(cols, course["projects"]):
+            with col:
+                st.markdown(
+                    f'<div class="learn-project"><div class="learn-project-level">{level}</div>'
+                    f'<div class="learn-project-title">{project}</div>'
+                    f'<div class="learn-project-desc">{build}</div>'
+                    f'<div style="margin-top:14px"><span class="learn-chip">Portfolio evidence</span></div></div>',
+                    unsafe_allow_html=True
+                )
+        st.write("")
+        st.success(
+            "Portfolio target: complete at least the Intermediate project and publish "
+            "source code, README, screenshots/architecture and a short project explanation."
+        )
+
+    with practice_tab:
+        st.markdown("### Hands-on practice")
+        st.caption("Use these tasks to verify that you can apply the concepts before taking the final quiz.")
+        for number, exercise in enumerate(course["practice"], 1):
+            left, right = st.columns([0.92, 0.08])
+            with left:
+                st.markdown(
+                    f'<div class="learn-road"><div class="learn-road-week">Practice {number}</div>'
+                    f'<div class="learn-road-title">{exercise}</div>'
+                    f'<div class="learn-road-sub">Complete this task independently and keep your output as evidence.</div></div>',
+                    unsafe_allow_html=True
+                )
+            with right:
+                st.checkbox("Done", key=f"pro_practice_done_{selected_track}_{number}")
+
+    with quiz_tab:
+        st.markdown(f"### Final {selected_track} assessment")
+        st.caption("Attempt this only after completing the modules, practice tasks and at least one project.")
+
+        result = st.session_state.get("professional_learning_quiz_result")
+
+        quiz_left, quiz_right = st.columns([2.15, 0.85])
+        with quiz_left:
+            with st.form(f"professional_learning_quiz_{selected_track}"):
+                answers = []
+                for i, (question, options, correct) in enumerate(course["quiz"], 1):
+                    st.markdown(f"**Question {i} of {len(course['quiz'])}**")
+                    answer = st.radio(
+                        question,
+                        options,
+                        index=None,
+                        key=f"learning_{selected_track}_{i}"
+                    )
+                    answers.append(answer)
+                submitted = st.form_submit_button(
+                    "Submit Final Assessment",
+                    width="stretch"
+                )
+
+            if submitted:
+                unanswered = sum(answer is None for answer in answers)
+                if unanswered:
+                    st.error(f"Please answer all questions. {unanswered} question(s) are incomplete.")
+                else:
+                    correct_count = sum(
+                        answer == question_data[2]
+                        for answer, question_data in zip(answers, course["quiz"])
+                    )
+                    score = round(correct_count / len(course["quiz"]) * 100)
+                    if score >= 80:
+                        level = "Industry Ready"
+                    elif score >= 60:
+                        level = "Intermediate"
+                    elif score >= 40:
+                        level = "Developing"
+                    else:
+                        level = "Beginner"
+
+                    st.session_state.professional_learning_quiz_result = {
+                        "track": selected_track,
+                        "score": score,
+                        "level": level,
+                        "correct": correct_count,
+                        "total": len(course["quiz"])
+                    }
+                    st.rerun()
+
+        with quiz_right:
+            result = st.session_state.get("professional_learning_quiz_result")
+            if result and result.get("track") == selected_track:
+                st.markdown(
+                    f'<div class="learn-card" style="text-align:center">'
+                    f'<div class="learn-icon" style="margin:0 auto 14px">🏆</div>'
+                    f'<h3>Your result</h3>'
+                    f'<div style="font-size:42px;font-weight:900;color:#4f46e5">{result["score"]}%</div>'
+                    f'<p>{result["correct"]}/{result["total"]} correct answers</p>'
+                    f'<span class="learn-chip">{result["level"]}</span></div>',
+                    unsafe_allow_html=True
+                )
+                st.progress(result["score"] / 100)
+                if result["score"] >= 80:
+                    st.success("Strong performance. Move to an advanced project or next track.")
+                elif result["score"] >= 60:
+                    st.info("Good foundation. Review weak concepts and strengthen your project.")
+                else:
+                    st.warning("Review the modules and practice tasks before retaking the quiz.")
+
+                report = f"""TALENTSPHERE ELEVATE - PROFESSIONAL LEARNING REPORT
+Learner: {st.session_state.user_name}
+Learning Track: {selected_track}
+Assessment Score: {result['score']}%
+Skill Level: {result['level']}
+Correct Answers: {result['correct']}/{result['total']}
+
+ROADMAP
+""" + "\n".join(f"{week}: {focus}" for week, focus in course["roadmap"])
+
+                st.download_button(
+                    "Download Learning Report",
+                    report,
+                    file_name=f"{selected_track.lower().replace(' ', '_')}_learning_report.txt",
+                    mime="text/plain",
+                    width="stretch"
+                )
+            else:
+                st.markdown(
+                    '<div class="learn-card" style="text-align:center">'
+                    '<div class="learn-icon" style="margin:0 auto 14px">📝</div>'
+                    '<h3>Assessment status</h3>'
+                    '<p>No result yet. Complete the learning material and submit the final quiz.</p>'
+                    '<span class="learn-chip">Not attempted</span></div>',
+                    unsafe_allow_html=True
+                )
+
+elif menu == "🚀 Career Transition Suggestions":
+    profile = get_professional_profile(st.session_state.user_id)
+    metrics = professional_metrics(profile)
+    matches = professional_role_matches(profile, metrics)
+    st.title("🚀 AI Career Transition Suggestions")
+    st.info(f"Current role: **{profile.get('current_role') or 'Not provided'}**")
+    df = pd.DataFrame(matches, columns=["Suggested Next Role", "Match %"])
+    st.dataframe(df, width="stretch", hide_index=True)
+    fig = px.bar(df, x="Suggested Next Role", y="Match %", text="Match %", title="Career Path Match")
+    fig.update_yaxes(range=[0,100])
+    st.plotly_chart(fig, width="stretch")
+
+elif menu == "📈 Promotion Readiness":
+    profile = get_professional_profile(st.session_state.user_id)
+    metrics = professional_metrics(profile)
+    st.title("📈 Promotion Readiness Analysis")
+    cols = st.columns(4)
+    values = [("Promotion", metrics["Promotion Readiness"]), ("Technical", metrics["Technical Readiness"]), ("Leadership", metrics["Leadership"]), ("Communication", metrics["Communication"])]
+    for col,(label,value) in zip(cols,values):
+        with col: st.metric(label, f"{value}%")
+    for label,value in values:
+        st.write(f"**{label} Readiness**")
+        st.progress(value/100)
+    if metrics["Promotion Readiness"] >= 80:
+        st.success("You show strong promotion readiness. Prepare a documented impact summary and discuss the next level with your manager.")
+    elif metrics["Promotion Readiness"] >= 65:
+        st.warning("You are progressing well. Increase leadership visibility and strengthen one high-demand technical area.")
+    else:
+        st.info("Focus on stronger technical depth, project ownership, communication and mentoring before seeking promotion.")
+
+elif menu == "💰 Career & Salary Insights":
+    profile = get_professional_profile(st.session_state.user_id)
+    metrics = professional_metrics(profile)
+    matches = professional_role_matches(profile, metrics)
+
+    current_role = (profile.get("current_role") or "Current role not added").strip()
+    experience = float(profile.get("total_experience") or 0)
+    current_salary = float(profile.get("current_salary") or 0)
+
+    target_role = (
+        matches[0][0]
+        if matches
+        else (profile.get("preferred_roles") or "Target role not added")
+    )
+    role_match = matches[0][1] if matches else 0
+
+    # Skill weights used to calculate professional salary readiness.
+    skill_weights = {
+        "Backend Development": 0.22,
+        "System Design": 0.20,
+        "Cloud Computing": 0.16,
+        "DevOps": 0.14,
+        "Leadership": 0.14,
+        "Communication": 0.14,
+    }
+
+    skill_scores = {
+        skill: int(metrics.get(skill, 0))
+        for skill in skill_weights
+    }
+
+    weighted_skill_score = round(
+        sum(skill_scores[skill] * weight for skill, weight in skill_weights.items())
+    )
+
+    # Experience score and career stage.
+    if experience < 1:
+        experience_score = 35
+        experience_level = "Entry Level"
+    elif experience < 3:
+        experience_score = 55
+        experience_level = "Early Career"
+    elif experience < 5:
+        experience_score = 72
+        experience_level = "Mid Level"
+    elif experience < 8:
+        experience_score = 86
+        experience_level = "Senior Level"
+    else:
+        experience_score = 95
+        experience_level = "Lead / Expert Level"
+
+    # Salary readiness = skills + experience + target-role fit.
+    salary_readiness = round(
+        weighted_skill_score * 0.55
+        + experience_score * 0.30
+        + role_match * 0.15
+    )
+    salary_readiness = max(0, min(100, salary_readiness))
+
+    if salary_readiness >= 85:
+        readiness_label = "Strong Salary Growth Potential"
+    elif salary_readiness >= 70:
+        readiness_label = "Good Salary Growth Potential"
+    elif salary_readiness >= 55:
+        readiness_label = "Moderate Salary Growth Potential"
+    else:
+        readiness_label = "Skill Development Required"
+
+    ranked_skills = sorted(skill_scores.items(), key=lambda item: item[1])
+    weakest_skills = ranked_skills[:3]
+    strongest_skills = sorted(
+        skill_scores.items(),
+        key=lambda item: item[1],
+        reverse=True
+    )[:3]
+
+    # Profile-based growth estimate. This is deliberately labeled as an estimate,
+    # not as live market salary data.
+    if salary_readiness >= 85:
+        base_growth = 35
+    elif salary_readiness >= 70:
+        base_growth = 25
+    elif salary_readiness >= 55:
+        base_growth = 15
+    else:
+        base_growth = 8
+
+    if experience < 2:
+        experience_bonus = 8
+    elif experience < 5:
+        experience_bonus = 6
+    elif experience < 8:
+        experience_bonus = 4
+    else:
+        experience_bonus = 2
+
+    lower_growth = max(5, base_growth - 5)
+    upper_growth = min(55, base_growth + experience_bonus)
+
+    estimated_low_salary = (
+        round(current_salary * (1 + lower_growth / 100), 1)
+        if current_salary > 0 else 0
+    )
+    estimated_high_salary = (
+        round(current_salary * (1 + upper_growth / 100), 1)
+        if current_salary > 0 else 0
+    )
+
+    st.markdown("""
+    <style>
+    .salary-hero{
+        position:relative;
+        overflow:hidden;
+        padding:30px 34px;
+        border-radius:24px;
+        background:
+            radial-gradient(circle at 89% 16%, rgba(255,255,255,.18), transparent 25%),
+            linear-gradient(135deg,#2456e8 0%,#4f46e5 52%,#7c3aed 100%);
+        box-shadow:0 18px 45px rgba(79,70,229,.20);
+        margin-bottom:22px;
+    }
+    .salary-hero h1{
+        color:white!important;
+        margin:13px 0 8px!important;
+        font-size:clamp(30px,3.2vw,42px)!important;
+        line-height:1.08!important;
+    }
+    .salary-hero p{
+        color:rgba(255,255,255,.90)!important;
+        font-size:14px!important;
+        line-height:1.65!important;
+        max-width:840px;
+        margin:0!important;
+    }
+    .salary-badge{
+        display:inline-flex;
+        padding:7px 11px;
+        border-radius:999px;
+        background:rgba(255,255,255,.15);
+        border:1px solid rgba(255,255,255,.25);
+        color:#fff!important;
+        font-size:11px;
+        font-weight:800;
+        letter-spacing:.07em;
+        text-transform:uppercase;
+    }
+    .salary-card{
+        background:#fff;
+        border:1px solid #E5EAF2;
+        border-radius:18px;
+        padding:20px;
+        box-shadow:0 8px 24px rgba(15,23,42,.05);
+        height:100%;
+    }
+    .salary-card h3{
+        color:#0F172A!important;
+        margin:0 0 12px!important;
+        font-size:18px!important;
+    }
+    .salary-item{
+        background:#F8FAFC;
+        border:1px solid #E5EAF2;
+        border-left:4px solid #2563EB;
+        border-radius:12px;
+        padding:12px 14px;
+        margin-bottom:9px;
+    }
+    .salary-item strong{color:#0F172A!important}
+    .salary-item span{color:#64748B!important;font-size:12px}
+    .salary-chip{
+        display:inline-block;
+        padding:6px 10px;
+        border-radius:999px;
+        background:#EEF2FF;
+        border:1px solid #E0E7FF;
+        color:#3730A3!important;
+        font-size:11px;
+        font-weight:750;
+        margin:3px 4px 3px 0;
+    }
+    </style>
+
+    <div class="salary-hero">
+        <span class="salary-badge">Skill & Experience Salary Intelligence</span>
+        <h1>See how your skills and experience influence salary growth.</h1>
+        <p>
+            TalentSphere combines your technical skills, professional experience and
+            target-role match to estimate salary readiness, identify high-value strengths
+            and show which skill gaps may be limiting your next career move.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    top1, top2, top3, top4 = st.columns(4)
+    top1.metric("Experience", f"{experience:g} years", experience_level)
+    top2.metric("Skill Readiness", f"{weighted_skill_score}%")
+    top3.metric("Target Role Match", f"{role_match}%")
+    top4.metric("Salary Readiness", f"{salary_readiness}%")
+
+    st.markdown("### 💰 Salary Growth Readiness")
+
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown(f"""
+        <div class="salary-card">
+            <h3>Professional Profile Analysis</h3>
+            <div class="salary-item"><strong>Current Role</strong><br><span>{current_role}</span></div>
+            <div class="salary-item"><strong>Target Role</strong><br><span>{target_role}</span></div>
+            <div class="salary-item"><strong>Career Stage</strong><br><span>{experience_level}</span></div>
+            <div class="salary-item"><strong>Growth Potential</strong><br><span>{readiness_label}</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with right:
+        if current_salary > 0:
+            salary_range = f"₹{estimated_low_salary:g} – ₹{estimated_high_salary:g} LPA"
+            growth_range = f"{lower_growth}% – {upper_growth}% estimated growth"
+        else:
+            salary_range = "Add current salary in Professional Profile"
+            growth_range = "Complete your salary field to calculate"
+
+        st.markdown(f"""
+        <div class="salary-card">
+            <h3>Profile-Based Salary Estimate</h3>
+            <div class="salary-item"><strong>Current Salary</strong><br>
+                <span>{f"₹{current_salary:g} LPA" if current_salary else "Not added"}</span>
+            </div>
+            <div class="salary-item"><strong>Estimated Next Range</strong><br>
+                <span>{salary_range}</span>
+            </div>
+            <div class="salary-item"><strong>Estimated Growth</strong><br>
+                <span>{growth_range}</span>
+            </div>
+            <div class="salary-item"><strong>Note</strong><br>
+                <span>This is based on profile readiness, not live market salary data.</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("### 📊 Skill Impact on Salary Potential")
+
+    impact_rows = []
+    for skill, score in sorted(
+        skill_scores.items(),
+        key=lambda item: item[1],
+        reverse=True
+    ):
+        if score >= 80:
+            impact = "Strong Positive"
+            action = "Maintain and demonstrate through projects/work impact"
+        elif score >= 65:
+            impact = "Positive"
+            action = "Strengthen to advanced level"
+        elif score >= 50:
+            impact = "Moderate"
+            action = "Build more hands-on evidence"
+        else:
+            impact = "Growth Limiter"
+            action = "High-priority learning area"
+
+        impact_rows.append({
+            "Skill": skill,
+            "Readiness": f"{score}%",
+            "Salary Impact": impact,
+            "Recommended Action": action
+        })
+
+    st.dataframe(
+        pd.DataFrame(impact_rows),
+        width="stretch",
+        hide_index=True
+    )
+
+    st.markdown("### 🎯 Strongest Skills vs Growth Gaps")
+
+    strong_col, weak_col = st.columns(2)
+
+    with strong_col:
+        st.markdown("#### ✅ Salary-Supporting Strengths")
+        for skill, score in strongest_skills:
+            st.markdown(
+                f'<div class="salary-item"><strong>{skill}</strong><br>'
+                f'<span>{score}% readiness · strengthens your salary profile</span></div>',
+                unsafe_allow_html=True
+            )
+
+    with weak_col:
+        st.markdown("#### ⚠️ Skills Limiting Growth")
+        for skill, score in weakest_skills:
+            st.markdown(
+                f'<div class="salary-item"><strong>{skill}</strong><br>'
+                f'<span>{score}% readiness · improve this for stronger opportunities</span></div>',
+                unsafe_allow_html=True
+            )
+
+    st.markdown("### 🧭 Experience-Based Career Strategy")
+
+    if experience < 2:
+        career_actions = [
+            "Strengthen core technical fundamentals.",
+            "Complete at least two practical portfolio projects.",
+            "Focus on role-specific interview preparation.",
+            "Build evidence of real-world problem solving."
+        ]
+    elif experience < 5:
+        career_actions = [
+            "Build deeper system design and production skills.",
+            "Own features or modules end-to-end.",
+            "Add cloud and deployment experience.",
+            "Document measurable impact from your work."
+        ]
+    elif experience < 8:
+        career_actions = [
+            "Strengthen architecture and technical leadership.",
+            "Lead larger initiatives and mentor team members.",
+            "Improve stakeholder communication and delivery ownership.",
+            "Target senior or lead-level responsibilities."
+        ]
+    else:
+        career_actions = [
+            "Focus on architecture, strategy and leadership impact.",
+            "Demonstrate organisation-level technical ownership.",
+            "Mentor engineers and influence engineering standards.",
+            "Target lead, architect or engineering-management paths."
+        ]
+
+    for index, action in enumerate(career_actions, 1):
+        st.markdown(
+            f'<div class="salary-item"><strong>Step {index}</strong><br>'
+            f'<span>{action}</span></div>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown("### 🚀 90-Day Salary Growth Plan")
+
+    plan_rows = [
+        {
+            "Timeline": "Days 1–30",
+            "Focus": weakest_skills[0][0],
+            "Action": "Complete the related Learning & Skills track and practice tasks."
+        },
+        {
+            "Timeline": "Days 31–60",
+            "Focus": weakest_skills[1][0],
+            "Action": "Build one practical project and add measurable evidence to your portfolio."
+        },
+        {
+            "Timeline": "Days 61–90",
+            "Focus": target_role,
+            "Action": "Update resume/profile, practise interviews and target roles matching your readiness."
+        }
+    ]
+
+    st.dataframe(
+        pd.DataFrame(plan_rows),
+        width="stretch",
+        hide_index=True
+    )
+
+    st.info(
+        "Salary growth shown here is a readiness estimate generated from your saved skills, "
+        "experience and target-role fit. It should not be treated as verified market compensation data."
+    )
+
+elif menu == "🔥 Industry Trends":
+    st.title("🔥 Industry Trend Recommendations")
+    trend_df = pd.DataFrame({"Skill": ["Kubernetes", "AWS", "Microservices", "System Design", "AI Integration"], "Demand Growth": [38,32,28,25,24]})
+    st.dataframe(trend_df.assign(**{"Demand Growth": trend_df["Demand Growth"].astype(str)+"%"}), width="stretch", hide_index=True)
+    fig = px.bar(trend_df, x="Skill", y="Demand Growth", text="Demand Growth", title="Illustrative Industry Demand Forecast")
+    st.plotly_chart(fig, width="stretch")
+    st.caption("Demand percentages are demonstration values supplied in the project module specification.")
+
+elif menu == "🎓 Certification Suggestions":
+    profile = get_professional_profile(st.session_state.user_id)
+    metrics = professional_metrics(profile)
+    recommendations=[]
+    if metrics["Cloud Computing"] < 75: recommendations.append(("AWS Solutions Architect", "High", "Cloud foundation and architecture"))
+    if metrics["DevOps"] < 75: recommendations.extend([("Docker Certified Associate", "High", "Container fundamentals"), ("Certified Kubernetes Administrator", "Medium", "Container orchestration")])
+    if metrics["System Design"] < 80: recommendations.append(("System Design Fundamentals", "Medium", "Scalable architecture skills"))
+    if not recommendations: recommendations=[("Advanced Cloud Architecture", "Medium", "Deepen cloud design"), ("Technical Leadership", "Medium", "Prepare for engineering leadership")]
+    st.title("🎓 Certification Suggestions")
+    st.dataframe(pd.DataFrame(recommendations, columns=["Certification", "Priority", "Why Recommended"]), width="stretch", hide_index=True)
+
+elif menu == "🧭 Leadership Evaluation":
+    profile=get_professional_profile(st.session_state.user_id)
+    metrics=professional_metrics(profile)
+    base=metrics["Leadership"]
+    scores={"Team Coordination":min(95,base+3),"Mentoring":min(95,base-4),"Decision Making":min(95,base+5),"Conflict Resolution":min(95,round((base+metrics['Communication'])/2)),"Project Ownership":min(95,base+1)}
+    st.title("🧭 Leadership Skill Evaluation")
+    for area,score in scores.items():
+        st.write(f"**{area} — {score}%**")
+        st.progress(score/100)
+
+elif menu == "🎯 Advanced Job Matching":
+    profile=get_professional_profile(st.session_state.user_id)
+    metrics=professional_metrics(profile)
+    matches=professional_role_matches(profile,metrics)
+    st.title("🎯 Advanced Job Matching")
+    rows=[]
+    for role,score in matches:
+        rows.append({"Role":role,"Match %":score,"Experience Fit":"Strong" if float(profile.get('total_experience') or 0)>=3 else "Developing","Salary Fit":"Aligned" if float(profile.get('expected_salary') or 0)>0 else "Add expectation"})
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+elif menu == "🤖 AI Growth Report":
+    profile=get_professional_profile(st.session_state.user_id)
+    metrics=professional_metrics(profile)
+    matches=professional_role_matches(profile,metrics)
+    strongest=max(["Backend Development","System Design","Cloud Computing","DevOps","Leadership"], key=lambda x:metrics[x])
+    weakest=min(["Backend Development","System Design","Cloud Computing","DevOps","Leadership"], key=lambda x:metrics[x])
+    st.title("🤖 Professional Growth Opportunity Analysis")
+    c1,c2,c3,c4=st.columns(4)
+    c1.metric("Current Role", profile.get("current_role") or "Not provided")
+    c2.metric("Next Best Role", matches[0][0])
+    c3.metric("Promotion Ready", f"{metrics['Promotion Readiness']}%")
+    c4.metric("Salary Growth", f"+{max(0,metrics['Salary Growth'])}%")
+    a,b=st.columns(2)
+    with a:
+        st.success(f"Strong area: **{strongest} ({metrics[strongest]}%)**")
+        st.write("Keep building: project delivery, measurable impact, API/design depth and stakeholder communication.")
+    with b:
+        st.warning(f"Priority area: **{weakest} ({metrics[weakest]}%)**")
+        st.write("Focus next: cloud, Docker, Kubernetes, system design and leadership visibility as applicable.")
+    plan=pd.DataFrame({"Month":["Month 1","Month 2","Month 3"],"Focus":["Cloud fundamentals and certification preparation","Docker, Kubernetes and deployment practice","System design, microservices and leadership project"]})
+    st.subheader("90-Day Action Plan")
+    st.dataframe(plan,width="stretch",hide_index=True)
+    report_text=f"""TALENTSPHERE ELEVATE - PROFESSIONAL GROWTH REPORT
+Name: {st.session_state.user_name}
+Current Role: {profile.get('current_role') or 'Not provided'}
+Experience: {profile.get('total_experience') or 0} years
+Next Best Role: {matches[0][0]} ({matches[0][1]}%)
+Promotion Readiness: {metrics['Promotion Readiness']}%
+Technical Readiness: {metrics['Technical Readiness']}%
+Leadership Readiness: {metrics['Leadership']}%
+Salary Growth Potential: +{max(0,metrics['Salary Growth'])}%
+Strongest Area: {strongest}
+Priority Area: {weakest}
+
+90-Day Plan:
+Month 1: Cloud fundamentals
+Month 2: Docker and Kubernetes
+Month 3: System design, microservices and leadership project
+"""
+    st.download_button("⬇ Download Professional Growth Report", report_text, "professional_growth_report.txt", "text/plain", width="stretch")
 
 # ==========================================================
 # OTHER USER DASHBOARD
